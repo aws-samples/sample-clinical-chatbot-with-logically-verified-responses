@@ -56,18 +56,25 @@
             let testCount = 0;
             let passCount = 0;
 
+            function addTestResult(className, icon, name, message = '') {
+                const div = document.createElement('div');
+                div.className = `test-result ${className}`;
+                div.textContent = `${icon} ${name}${message ? ': ' + message : ''}`;
+                results.appendChild(div);
+            }
+
             function test(name, testFn) {
                 testCount++;
                 try {
                     const result = testFn();
                     if (result.pass) {
                         passCount++;
-                        results.innerHTML += `<div class="test-result pass">✅ ${name}</div>`;
+                        addTestResult('pass', '✅', name);
                     } else {
-                        results.innerHTML += `<div class="test-result fail">❌ ${name}: ${result.message}</div>`;
+                        addTestResult('fail', '❌', name, result.message);
                     }
                 } catch (error) {
-                    results.innerHTML += `<div class="test-result fail">❌ ${name}: ${error.message}</div>`;
+                    addTestResult('fail', '❌', name, error.message);
                 }
             }
 
@@ -163,12 +170,19 @@
             });
 
             // Summary
-            results.innerHTML += `<div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px;">
-                <strong>Test Results: ${passCount}/${testCount} passed</strong>
-            </div>`;
+            const summaryDiv = document.createElement('div');
+            summaryDiv.style.marginTop = '20px';
+            summaryDiv.style.padding = '15px';
+            summaryDiv.style.background = '#e9ecef';
+            summaryDiv.style.borderRadius = '4px';
+            
+            const summaryText = document.createElement('strong');
+            summaryText.textContent = `Test Results: ${passCount}/${testCount} passed`;
+            summaryDiv.appendChild(summaryText);
+            results.appendChild(summaryDiv);
 
             if (passCount === testCount) {
-                results.innerHTML += `<div class="test-result pass">🎉 All tests passed! The union/whats_new logic is working correctly.</div>`;
+                addTestResult('pass', '🎉', 'All tests passed! The union/whats_new logic is working correctly.');
             }
         }
 
