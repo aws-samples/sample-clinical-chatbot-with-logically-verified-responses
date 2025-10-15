@@ -1,0 +1,373 @@
+:root {
+  /* Design Tokens - Colors */
+  --primary-color: #007bff;
+  --user-message-bg: #007bff;
+  --assistant-message-bg: #f1f3f4;
+  --theory-section-bg: #fafafa;
+  --separator-color: #ddd;
+  --separator-hover-color: #007bff;
+  --separator-active-color: #0056b3;
+  --text-color: #333;
+  --text-color-light: #666;
+  --text-color-inverse: #ffffff;
+  --background-color: #ffffff;
+  --border-color: #e1e5e9;
+  --input-border-color: #d1d5db;
+  --input-focus-color: #007bff;
+  --error-color: #dc3545;
+  --success-color: #28a745;
+  
+  /* Design Tokens - Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  
+  /* Design Tokens - Typography */
+  --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Design Tokens - Layout */
+  --border-radius: 18px;
+  --border-radius-sm: 8px;
+  --border-radius-lg: 24px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Dual-Pane Layout Dimensions */
+  --min-chat-width: 300px;
+  --min-theory-width: 250px;
+  --separator-width: 4px;
+  --default-chat-width: 70%;
+  --default-theory-width: 30%;
+  
+  /* Layout Heights */
+  --header-height: 60px;
+  --input-height: 60px;
+  --max-content-height: calc(100vh - var(--header-height) - var(--input-height));
+  
+  /* Responsive Breakpoints (for use in media queries) */
+  --breakpoint-mobile: 320px;
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1024px;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-normal: 0.25s ease-in-out;
+  --transition-slow: 0.35s ease-in-out;
+  
+  /* Animation and State Variables */
+  --separator-hover-width: 6px;
+  --separator-focus-color: #007bff;
+  --focus-ring-color: rgba(0, 123, 255, 0.25);
+  --theory-scroll-track-color: #f1f1f1;
+  --theory-scroll-thumb-color: #c1c1c1;
+  --theory-scroll-thumb-hover-color: #a8a8a8;
+  --chat-bg-color: #ffffff;
+  --theory-header-bg: #ffffff;
+
+  /* Base font settings */
+  font-family: var(--font-family);
+  line-height: var(--line-height-normal);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-color);
+  background-color: var(--background-color);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: var(--breakpoint-mobile);
+  min-height: 100vh;
+  font-family: var(--font-family);
+  color: var(--text-color);
+  background-color: var(--background-color);
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-family);
+  background-color: var(--primary-color);
+  color: var(--text-color-inverse);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+button:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 2px solid var(--input-focus-color);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Base typography styles */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+h1 {
+  font-size: var(--font-size-xl);
+}
+
+h2 {
+  font-size: var(--font-size-lg);
+}
+
+h3 {
+  font-size: var(--font-size-base);
+}
+
+p {
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+/* Base layout styles */
+.dual-pane-layout {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chat-pane {
+  flex: 0 0 var(--default-chat-width);
+  min-width: var(--min-chat-width);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-color);
+}
+
+.theory-pane {
+  flex: 0 0 var(--default-theory-width);
+  min-width: var(--min-theory-width);
+  background-color: var(--theory-section-bg);
+  border-left: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+/* Separator base styles */
+.resizable-separator {
+  width: var(--separator-width);
+  background-color: var(--separator-color);
+  cursor: col-resize;
+  transition: background-color var(--transition-fast);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.resizable-separator:hover {
+  background-color: var(--separator-hover-color);
+}
+
+.resizable-separator:active,
+.resizable-separator.dragging {
+  background-color: var(--separator-active-color);
+}
+
+.resizable-separator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -2px;
+  right: -2px;
+  bottom: 0;
+  cursor: col-resize;
+}
+
+/* Theory section base styles */
+.theory-section {
+  height: 100%;
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.theory-section h2 {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-color);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.theory-section h3 {
+  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+  color: var(--text-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.theory-section p {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-color-light);
+}
+
+.theory-section ul,
+.theory-section ol {
+  margin: var(--spacing-sm) 0 var(--spacing-md) var(--spacing-lg);
+  padding: 0;
+}
+
+.theory-section li {
+  margin-bottom: var(--spacing-xs);
+  color: var(--text-color-light);
+}
+
+/* Custom scrollbar for theory section */
+.theory-section::-webkit-scrollbar {
+  width: 8px;
+}
+
+.theory-section::-webkit-scrollbar-track {
+  background: var(--theory-scroll-track-color);
+  border-radius: var(--border-radius-sm);
+}
+
+.theory-section::-webkit-scrollbar-thumb {
+  background: var(--theory-scroll-thumb-color);
+  border-radius: var(--border-radius-sm);
+}
+
+.theory-section::-webkit-scrollbar-thumb:hover {
+  background: var(--theory-scroll-thumb-hover-color);
+}
+
+/* Firefox scrollbar */
+.theory-section {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theory-scroll-thumb-color) var(--theory-scroll-track-color);
+}
+
+/* Utility classes */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Responsive breakpoints with dual-pane considerations */
+@media (max-width: 767px) {
+  /* Mobile styles - Single pane layout */
+  :root {
+    --spacing-md: 12px;
+    --spacing-lg: 20px;
+    --font-size-base: 0.9rem;
+    --default-chat-width: 100%;
+    --default-theory-width: 0%;
+    --min-theory-width: 0px;
+    --separator-width: 0px;
+  }
+  
+  .theory-pane {
+    display: none;
+  }
+  
+  .resizable-separator {
+    display: none;
+  }
+  
+  .chat-pane {
+    flex: 1;
+    min-width: auto;
+  }
+  
+  .theory-section {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet styles - Fixed dual-pane proportions */
+  :root {
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --default-chat-width: 70%;
+    --default-theory-width: 30%;
+    --min-theory-width: 200px;
+    --separator-width: 3px;
+  }
+  
+  .resizable-separator {
+    cursor: default;
+    pointer-events: none;
+  }
+  
+  .resizable-separator::before {
+    display: none;
+  }
+  
+  .theory-section {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop styles - Full resizable dual-pane */
+  :root {
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --default-chat-width: 65%;
+    --default-theory-width: 35%;
+    --min-theory-width: 250px;
+    --separator-width: 4px;
+  }
+}

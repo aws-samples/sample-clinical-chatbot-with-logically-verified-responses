@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Union/WhatsNew Logic</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .pass { background: #d4edda; border: 1px solid #c3e6cb; }
+        .fail { background: #f8d7da; border: 1px solid #f5c6cb; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Union/WhatsNew Logic</h1>
+    <div id="results"></div>
+
+    <script>
+        // TypeScript-like interfaces for testing
+        const unionResponses = (current, update) => {
+            const result = { ...current };
+            
+            // Merge non-undefined values from update
+            Object.entries(update).forEach(([key, value]) => {
+                if (value !== undefined) {
+                    result[key] = value;
+                }
+            });
+            
+            return result;
+        };
+
+        const whatsNew = (previous, current) => {
+            const result = {};
+            
+            Object.entries(current).forEach(([key, value]) => {
+                const prevValue = previous[key];
+                
+                // Add if the value is newly defined (was undefined in previous)
+                if (prevValue === undefined && value !== undefined) {
+                    result[key] = value;
+                }
+                
+                // Special handling for array fields
+                if ((key === 'error_messages' || key === 'progress_messages') && 
+                    Array.isArray(prevValue) && Array.isArray(value) && 
+                    value.length > prevValue.length) {
+                    result[key] = value.slice(prevValue.length);
+                }
+            });
+            
+            return result;
+        };
+
+        function runTests() {
+            const results = document.getElementById('results');
+            let testCount = 0;
+            let passCount = 0;
+
+            function test(name, testFn) {
+                testCount++;
+                try {
+                    const result = testFn();
+                    if (result.pass) {
+                        passCount++;
+                        results.innerHTML += `<div class="test-result pass">✅ ${name}</div>`;
+                    } else {
+                        results.innerHTML += `<div class="test-result fail">❌ ${name}: ${result.message}</div>`;
+                    }
+                } catch (error) {
+                    results.innerHTML += `<div class="test-result fail">❌ ${name}: ${error.message}</div>`;
+                }
+            }
+
+            // Test 1: Basic union
+            test('Basic Union', () => {
+                const r1 = { assistant_response: 'Hello' };
+                const r2 = { extracted_logical_stmt: '(= name "Joe")' };
+                const result = unionResponses(r1, r2);
+                
+                const expected = { assistant_response: 'Hello', extracted_logical_stmt: '(= name "Joe")' };
+                return {
+                    pass: JSON.stringify(result) === JSON.stringify(expected),
+                    message: `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(result)}`
+                };
+            });
+
+            // Test 2: Union with override
+            test('Union with Override', () => {
+                const r1 = { assistant_response: 'Hello', valid: 'unknown' };
+                const r2 = { valid: 'true', durations: { llm: 1.5 } };
+                const result = unionResponses(r1, r2);
+                
+                const expected = { assistant_response: 'Hello', valid: 'true', durations: { llm: 1.5 } };
+                return {
+                    pass: JSON.stringify(result) === JSON.stringify(expected),
+                    message: `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(result)}`
+                };
+            });
+
+            // Test 3: WhatsNew - new fields
+            test('WhatsNew - New Fields', () => {
+                const r1 = { assistant_response: 'Hello' };
+                const r2 = { assistant_response: 'Hello', extracted_logical_stmt: '(= name "Joe")' };
+                const result = whatsNew(r1, r2);
+                
+                const expected = { extracted_logical_stmt: '(= name "Joe")' };
+                return {
+                    pass: JSON.stringify(result) === JSON.stringify(expected),
+                    message: `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(result)}`
+                };
+            });
+
+            // Test 4: WhatsNew - no changes
+            test('WhatsNew - No Changes', () => {
+                const r1 = { assistant_response: 'Hello', valid: 'true' };
+                const r2 = { assistant_response: 'Hello', valid: 'true' };
+                const result = whatsNew(r1, r2);
+                
+                const expected = {};
+                return {
+                    pass: JSON.stringify(result) === JSON.stringify(expected),
+                    message: `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(result)}`
+                };
+            });
+
+            // Test 5: Streaming simulation
+            test('Streaming Simulation', () => {
+                let cumulative = {};
+                const updates = [
+                    { assistant_response: 'The patient name is Joe Bloggs.' },
+                    { extracted_logical_stmt: '(= name "Joe Bloggs")' },
+                    { valid: 'true', durations: { llm: 1.2, extraction: 2.5 } }
+                ];
+
+                const newDataHistory = [];
+                
+                updates.forEach(update => {
+                    const newData = whatsNew(cumulative, update);
+                    newDataHistory.push(newData);
+                    cumulative = unionResponses(cumulative, update);
+                });
+
+                const expectedNewData = [
+                    { assistant_response: 'The patient name is Joe Bloggs.' },
+                    { extracted_logical_stmt: '(= name "Joe Bloggs")' },
+                    { valid: 'true', durations: { llm: 1.2, extraction: 2.5 } }
+                ];
+
+                const expectedFinal = {
+                    assistant_response: 'The patient name is Joe Bloggs.',
+                    extracted_logical_stmt: '(= name "Joe Bloggs")',
+                    valid: 'true',
+                    durations: { llm: 1.2, extraction: 2.5 }
+                };
+
+                const newDataMatch = JSON.stringify(newDataHistory) === JSON.stringify(expectedNewData);
+                const finalMatch = JSON.stringify(cumulative) === JSON.stringify(expectedFinal);
+
+                return {
+                    pass: newDataMatch && finalMatch,
+                    message: `NewData: ${newDataMatch ? 'OK' : 'FAIL'}, Final: ${finalMatch ? 'OK' : 'FAIL'}`
+                };
+            });
+
+            // Summary
+            results.innerHTML += `<div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px;">
+                <strong>Test Results: ${passCount}/${testCount} passed</strong>
+            </div>`;
+
+            if (passCount === testCount) {
+                results.innerHTML += `<div class="test-result pass">🎉 All tests passed! The union/whats_new logic is working correctly.</div>`;
+            }
+        }
+
+        // Run tests on page load
+        window.onload = runTests;
+    </script>
+</body>
+</html>

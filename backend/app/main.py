@@ -1,0 +1,337 @@
+"""
+FastAPI backend for React Chatbot
+Provides chat API endpoints with proper error handling and CORS support
+"""
+
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+import asyncio
+import random
+from typing import Dict, Any
+import logging
+import json
+
+# Configure logging first
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+from .models import ChatRequest, ChatResponse, FactsResponse, AxiomsResponse, ErrorResponse, StreamingChatResponse
+from .services.chat_service import ChatService
+from .core.exceptions import ChatServiceError
+
+# Import the interface module from root directory
+import sys
+import os
+
+# Add the root directory to Python path (go up from backend/app/ to root)
+root_dir = os.path.join(os.path.dirname(__file__), '..', '..')
+sys.path.insert(0, root_dir)
+
+from interface import get_facts_nat_lang, process_user_response, get_axioms_as_str, process_user_response_streaming
+logger.info("Successfully imported full interface module with AI agents")
+
+# Create FastAPI app
+app = FastAPI(
+    title="React Chatbot API",
+    description="Backend API for the React Chatbot application",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for debugging
+    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# Initialize chat service
+chat_service = ChatService()
+
+@app.get("/")
+async def root():
+    """Health check endpoint"""
+    return {"message": "React Chatbot API is running", "status": "healthy"}
+
+@app.get("/health")
+async def health_check():
+    """Detailed health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "react-chatbot-api",
+        "version": "1.0.0"
+    }
+
+@app.get("/api/facts", response_model=FactsResponse)
+async def get_facts():
+    """
+    Get theorem prover facts in natural language
+    
+    Returns:
+        FactsResponse with list of facts and timestamp
+        
+    Raises:
+        HTTPException: If facts cannot be retrieved
+    """
+    try:
+        logger.info("Fetching theorem prover facts...")
+        
+        # Get facts from the interface module
+        facts = get_facts_nat_lang()
+        
+        logger.info(f"Retrieved {len(facts)} facts")
+        
+        return FactsResponse(
+            facts=facts,
+            timestamp=chat_service.get_current_timestamp()
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching facts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "FACTS_ERROR",
+                "message": "Could not retrieve theorem prover facts",
+                "retryable": True
+            }
+        )
+
+@app.get("/api/axioms", response_model=AxiomsResponse)
+async def get_axioms():
+    """
+    Get theorem prover axioms
+    
+    Returns:
+        AxiomsResponse with list of axioms and timestamp
+        
+    Raises:
+        HTTPException: If axioms cannot be retrieved
+    """
+    try:
+        logger.info("Fetching theorem prover axioms...")
+        
+        # Get axioms from the interface module
+        axioms = get_axioms_as_str()
+        
+        logger.info(f"Retrieved {len(axioms)} axioms")
+        for i, axiom in enumerate(axioms):
+            logger.info(f"Axiom #{i,:}: {axiom}")
+        
+        return AxiomsResponse(
+            axioms=axioms,
+            timestamp=chat_service.get_current_timestamp()
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching axioms: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "AXIOMS_ERROR",
+                "message": "Could not retrieve theorem prover axioms",
+                "retryable": True
+            }
+        )
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def send_message(request: ChatRequest):
+    """
+    Send a message to the chatbot and get a response
+    
+    Args:
+        request: ChatRequest containing the user message
+        
+    Returns:
+        ChatResponse with the assistant's reply and theorem prover information
+        
+    Raises:
+        HTTPException: For various error conditions
+    """
+    try:
+        logger.info(f"Received chat request: {request.message[:50]}...")
+        
+        # Process the message using the theorem prover interface directly
+        logger.info("Attempting to use theorem prover interface...")
+        response_obj = process_user_response(request.message, do_corrupt=True)
+        
+        logger.info(f"✅ Theorem prover response: {response_obj.assistant_response[:50]}...")
+        
+        return ChatResponse(
+            message=response_obj.assistant_response,
+            timestamp=chat_service.get_current_timestamp(),
+            corrupted_response=response_obj.corrupted_response if response_obj.corrupted_response != response_obj.assistant_response else None,
+            extracted_logical_stmt=response_obj.extracted_logical_stmt,
+            validity=response_obj.valid,
+            processing_durations=response_obj.durations
+        )
+        
+    except ChatServiceError as e:
+        logger.error(f"Chat service error: {e}")
+        
+        # Map internal errors to HTTP status codes
+        status_code = status.HTTP_400_BAD_REQUEST
+        if e.error_code == "NETWORK_ERROR":
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        elif e.error_code == "TIMEOUT_ERROR":
+            status_code = status.HTTP_408_REQUEST_TIMEOUT
+        elif e.error_code in ["EMPTY_MESSAGE", "MESSAGE_TOO_LONG"]:
+            status_code = status.HTTP_400_BAD_REQUEST
+        
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "error": e.error_code,
+                "message": str(e),
+                "retryable": e.retryable
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "retryable": True
+            }
+        )
+
+@app.post("/api/chat/stream")
+async def send_message_stream(request: ChatRequest):
+    """
+    Send a message to the chatbot and get a streaming response
+    
+    Args:
+        request: ChatRequest containing the user message
+        
+    Returns:
+        StreamingResponse with Server-Sent Events containing progressive updates
+        
+    Raises:
+        HTTPException: For various error conditions
+    """
+    try:
+        logger.info(f"Received streaming chat request: {request.message[:50]}...")
+        
+        def generate_stream():
+            """Generator function for Server-Sent Events"""
+            try:
+                logger.info("Using theorem prover interface for streaming...")
+                
+                # Suppress stdout/stderr to prevent debug output from leaking
+                import sys
+                import os
+                from contextlib import redirect_stdout, redirect_stderr
+                from io import StringIO
+                
+                # Use the streaming function from interface with suppressed output
+                with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                    logger.info("about to call process_user_response_streaming")
+                    for idx, event_obj in enumerate(process_user_response_streaming(request.message, do_corrupt=True)):
+                        logger.info(f"{idx}>>>>> {event_obj}")
+                        
+                        # Helper function to safely get JSON-serializable values
+                        def safe_getattr(obj, attr, default=None):
+                            value = getattr(obj, attr, default)
+                            # Skip functions and other non-serializable objects
+                            if callable(value):
+                                return default
+                            return value
+                        
+                        # Handle different event types
+                        if hasattr(event_obj, 'message') and not hasattr(event_obj, 'assistant_response'):
+                            # This is a ProgressUpdate event
+                            streaming_response = {
+                                "type": "progress",
+                                "message": safe_getattr(event_obj, 'message', ''),
+                                "timestamp": chat_service.get_current_timestamp(),
+                                "is_final": safe_getattr(event_obj, 'is_final', False)
+                            }
+                        else:
+                            # This is a FinalSummary event
+                            streaming_response = {
+                                "type": "final",
+                                "assistant_response": safe_getattr(event_obj, 'assistant_response', None),
+                                "corrupted_response": safe_getattr(event_obj, 'corrupted_response', None),
+                                "extracted_logical_stmt": safe_getattr(event_obj, 'extracted_logical_stmt', None),
+                                "durations": safe_getattr(event_obj, 'durations', None),
+                                "valid": safe_getattr(event_obj, 'valid', None),
+                                "original_result": safe_getattr(event_obj, 'original_result', None),
+                                "negated_result": safe_getattr(event_obj, 'negated_result', None),
+                                "error_messages": safe_getattr(event_obj, 'error_messages', None),
+                                "progress_messages": safe_getattr(event_obj, 'progress_messages', None),
+                                "timestamp": chat_service.get_current_timestamp(),
+                                "is_final": safe_getattr(event_obj, 'is_final', True)
+                            }
+                        
+                        # Send as Server-Sent Event
+                        import json
+                        data = json.dumps(streaming_response)
+                        yield f"data: {data}\n\n"
+                
+
+                    
+            except Exception as e:
+                import traceback
+                logger.error(f"Error in streaming generator: {e}")
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                error_response = {
+                    "type": "final",
+                    "assistant_response": "An error occurred while processing your request.",
+                    "timestamp": chat_service.get_current_timestamp(),
+                    "is_final": True
+                }
+                import json
+                yield f"data: {json.dumps(error_response)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in streaming endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "retryable": True
+            }
+        )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """Custom HTTP exception handler"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.detail
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc: Exception):
+    """General exception handler for unhandled errors"""
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "INTERNAL_ERROR",
+            "message": "An unexpected error occurred",
+            "retryable": True
+        }
+    )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

@@ -1,0 +1,309 @@
+/* MessageList Component Styles */
+
+.message-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--background-color);
+  position: relative;
+}
+
+.message-list-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--spacing-md);
+  scroll-behavior: smooth;
+  position: relative;
+  
+  /* Custom scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.message-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-list-container::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: var(--border-radius-sm);
+}
+
+.message-list-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.message-list-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-color-light);
+}
+
+.messages-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 100%;
+  padding-bottom: var(--spacing-sm);
+  width: 100%;
+}
+
+/* Empty state styling */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-color-light);
+  text-align: center;
+  padding: var(--spacing-xl);
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-relaxed);
+  opacity: 0.8;
+}
+
+/* Message wrapper for alignment */
+.message-wrapper {
+  display: flex;
+  margin-bottom: var(--spacing-sm);
+}
+
+.message-wrapper.user {
+  justify-content: flex-end;
+}
+
+.message-wrapper.assistant {
+  justify-content: flex-start;
+}
+
+/* Message bubble styling (temporary - will be refined in task 10.3) */
+.message-bubble {
+  max-width: 70%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  word-wrap: break-word;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-fast);
+}
+
+.message-bubble:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.message-bubble.user {
+  background-color: var(--user-message-bg);
+  color: var(--text-color-inverse);
+  border-bottom-right-radius: var(--spacing-xs);
+}
+
+.message-bubble.assistant {
+  background-color: var(--assistant-message-bg);
+  color: var(--text-color);
+  border-bottom-left-radius: var(--spacing-xs);
+}
+
+.message-content {
+  line-height: var(--line-height-normal);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  opacity: 0.7;
+}
+
+.message-timestamp {
+  font-size: var(--font-size-xs);
+  color: inherit;
+}
+
+.message-status {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.message-status.sending {
+  color: #fbbf24;
+}
+
+.message-status.sent {
+  color: var(--success-color);
+}
+
+.message-status.error {
+  color: var(--error-color);
+}
+
+
+
+/* Responsive design for different screen sizes */
+@media (max-width: 767px) {
+  /* Mobile - Single pane layout */
+  .message-list-container {
+    padding: var(--spacing-sm);
+  }
+  
+  .message-bubble {
+    max-width: 85%;
+    padding: var(--spacing-sm);
+  }
+  
+  .messages-content {
+    gap: var(--spacing-xs);
+  }
+  
+  .message-wrapper {
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .empty-state {
+    padding: var(--spacing-lg);
+  }
+  
+  .empty-state p {
+    font-size: var(--font-size-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  /* Small mobile screens */
+  .message-list-container {
+    padding: var(--spacing-xs);
+  }
+  
+  .message-bubble {
+    max-width: 90%;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+  
+  .empty-state {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet - Fixed dual-pane proportions */
+  .message-list-container {
+    padding: var(--spacing-md);
+  }
+  
+  .message-bubble {
+    max-width: 80%;
+  }
+  
+  .messages-content {
+    gap: var(--spacing-sm);
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop - Full resizable dual-pane */
+  .message-list-container {
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+  
+  .message-bubble {
+    max-width: 75%;
+  }
+  
+  .messages-content {
+    gap: var(--spacing-md);
+  }
+  
+  .empty-state {
+    padding: var(--spacing-xl);
+  }
+}
+
+/* Smooth scroll behavior for better UX */
+@media (prefers-reduced-motion: no-preference) {
+  .message-list-container {
+    scroll-behavior: smooth;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .message-bubble.user {
+    background-color: #0056b3;
+    border: 2px solid #004085;
+  }
+  
+  .message-bubble.assistant {
+    background-color: #e9ecef;
+    border: 2px solid var(--text-color);
+    color: var(--text-color);
+  }
+  
+  .message-list-container::-webkit-scrollbar-thumb {
+    background: var(--text-color);
+    border: 1px solid var(--background-color);
+  }
+}
+
+/* Dual-pane layout integration */
+.message-list.in-dual-pane {
+  /* Ensure proper sizing within dual-pane layout */
+  width: 100%;
+  height: 100%;
+}
+
+.message-list.in-dual-pane .message-list-container {
+  /* Optimize scrolling performance in dual-pane */
+  will-change: scroll-position;
+}
+
+/* Ensure proper flex behavior */
+.message-list-container {
+  flex: 1;
+  min-height: 0; /* Critical for proper scrolling in nested flex containers */
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* Align messages to bottom when few messages */
+  min-height: 100%;
+}
+
+/* When there are enough messages to scroll, use normal flex behavior */
+.messages-content.has-overflow {
+  justify-content: flex-start;
+}
+
+/* Keyboard navigation support */
+.message-list-container:focus {
+  outline: 2px solid var(--input-focus-color);
+  outline-offset: -2px;
+}
+
+/* Screen reader announcements are handled via aria-live attributes */
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .message-list-container {
+    scroll-behavior: auto;
+  }
+  
+  .message-bubble {
+    transition: none;
+  }
+}

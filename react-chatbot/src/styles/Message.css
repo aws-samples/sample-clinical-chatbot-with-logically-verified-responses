@@ -1,0 +1,534 @@
+/* Message Component Styles */
+
+/* Base message wrapper styling */
+.message-wrapper {
+  display: flex;
+  margin-bottom: var(--spacing-sm);
+  animation: messageSlideIn var(--transition-normal) ease-out;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* User message alignment - right side */
+.message-wrapper.user,
+.message-wrapper.user-message {
+  justify-content: flex-end;
+}
+
+/* Assistant message alignment - left side */
+.message-wrapper.assistant,
+.message-wrapper.assistant-message {
+  justify-content: flex-start;
+}
+
+/* Base message bubble styling */
+.message-bubble {
+  max-width: 70%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  word-wrap: break-word;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.message-bubble:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* User message styling - blue background, right-aligned */
+.message-bubble.user {
+  background: linear-gradient(135deg, var(--user-message-bg) 0%, #0056b3 100%);
+  color: var(--text-color-inverse);
+  border-bottom-right-radius: var(--spacing-xs);
+}
+
+/* Assistant message styling - gray background, left-aligned */
+.message-bubble.assistant {
+  background-color: var(--assistant-message-bg);
+  color: var(--text-color);
+  border-bottom-left-radius: var(--spacing-xs);
+  border: 1px solid var(--border-color);
+}
+
+/* Message content styling */
+.message-content {
+  line-height: var(--line-height-normal);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  margin: 0;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* Message metadata (timestamp and status) */
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  opacity: 0.75;
+  transition: opacity var(--transition-fast);
+}
+
+.message-bubble:hover .message-meta {
+  opacity: 1;
+}
+
+/* Timestamp styling */
+.message-timestamp {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: inherit;
+}
+
+/* Status indicator styling */
+.message-status {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.message-status.sending {
+  color: #f59e0b;
+}
+
+.message-status.sent {
+  color: var(--success-color);
+}
+
+.message-status.error {
+  color: var(--error-color);
+}
+
+/* Retry button styling */
+.retry-button {
+  background: none;
+  border: 1px solid currentColor;
+  color: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  transition: all var(--transition-fast);
+  margin-left: var(--spacing-xs);
+}
+
+.retry-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.retry-button:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.retry-button:active {
+  transform: translateY(0);
+}
+
+.retry-icon {
+  font-size: var(--font-size-sm);
+  animation: none;
+}
+
+.retry-button:hover .retry-icon {
+  animation: spin 0.5s ease-in-out;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* User message retry button styling */
+.user-message .retry-button {
+  border-color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.user-message .retry-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.9);
+  color: #ffffff;
+}
+
+/* Assistant message retry button styling */
+.assistant-message .retry-button {
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.assistant-message .retry-button:hover {
+  background-color: rgba(220, 38, 38, 0.1);
+  border-color: var(--error-color);
+}
+
+/* Status icons using CSS */
+.message-status.sending::before {
+  content: "⏳";
+  font-size: var(--font-size-xs);
+}
+
+.message-status.sent::before {
+  content: "✓";
+  font-size: var(--font-size-xs);
+}
+
+.message-status.error::before {
+  content: "⚠";
+  font-size: var(--font-size-xs);
+}
+
+/* User message specific overrides */
+.user-message .message-meta {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.user-message .message-timestamp {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.user-message .message-status.sending {
+  color: #fef3c7;
+}
+
+.user-message .message-status.sent {
+  color: #d1fae5;
+}
+
+.user-message .message-status.error {
+  color: #fecaca;
+}
+
+/* Assistant message specific overrides */
+.assistant-message .message-meta {
+  color: var(--text-color-light);
+}
+
+.assistant-message .message-timestamp {
+  color: var(--text-color-light);
+}
+
+/* Avatar placeholders for future enhancement */
+.message-wrapper::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin: 0 var(--spacing-sm);
+  align-self: flex-end;
+  display: none; /* Hidden by default, can be enabled later */
+}
+
+.user-message::before {
+  background: linear-gradient(135deg, var(--primary-color), #0056b3);
+  order: 2;
+}
+
+.assistant-message::before {
+  background: linear-gradient(135deg, var(--assistant-message-bg), #e2e8f0);
+  order: 0;
+}
+
+/* Responsive design for mobile devices */
+@media (max-width: 767px) {
+  .message-bubble {
+    max-width: 85%;
+    padding: var(--spacing-sm);
+  }
+  
+  .message-content {
+    font-size: var(--font-size-sm);
+  }
+  
+  .message-wrapper {
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .message-meta {
+    margin-top: var(--spacing-xs);
+    gap: var(--spacing-xs);
+  }
+}
+
+@media (max-width: 480px) {
+  .message-bubble {
+    max-width: 90%;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+  
+  .message-content {
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-tight);
+  }
+  
+  .message-meta {
+    font-size: var(--font-size-xs);
+  }
+  
+  .retry-button {
+    font-size: var(--font-size-xs);
+    padding: 2px var(--spacing-xs);
+  }
+  
+  .message-timestamp,
+  .message-status {
+    font-size: var(--font-size-xs);
+  }
+  
+  /* Reduce hover effects on touch devices */
+  .message-bubble:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* High contrast mode support for accessibility */
+@media (prefers-contrast: high) {
+  .message-bubble.user {
+    background: #0056b3 !important;
+    border: 2px solid #004085;
+    color: #ffffff;
+  }
+  
+  .message-bubble.assistant {
+    background-color: #e9ecef;
+    border: 2px solid var(--text-color);
+    color: var(--text-color);
+  }
+  
+  .message-status.sending {
+    color: #856404;
+  }
+  
+  .message-status.sent {
+    color: #155724;
+  }
+  
+  .message-status.error {
+    color: #721c24;
+  }
+  
+  .user-message .message-status.sending,
+  .user-message .message-status.sent,
+  .user-message .message-status.error {
+    color: #ffffff;
+    font-weight: var(--font-weight-semibold);
+  }
+  
+  .message-bubble:hover {
+    transform: none;
+  }
+}
+
+/* Focus styles for accessibility - removed to prevent blue outline on click */
+.message-wrapper:focus {
+  outline: none;
+}
+
+.message-wrapper:focus-within {
+  outline: none;
+}
+
+/* Ensure messages are keyboard navigable */
+.message-wrapper[tabindex="0"] {
+  cursor: pointer;
+}
+
+
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .message-bubble {
+    transition: none;
+  }
+  
+  .message-wrapper {
+    animation: none;
+  }
+  
+  .message-bubble:hover {
+    transform: none;
+  }
+  
+  .message-meta {
+    transition: none;
+  }
+  
+  .retry-button {
+    transition: none;
+  }
+  
+  .retry-button:hover {
+    transform: none;
+  }
+  
+  .retry-button:active {
+    transform: none;
+  }
+  
+  .retry-button:hover .retry-icon {
+    animation: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .message-bubble {
+    box-shadow: none;
+    border: 1px solid var(--border-color);
+    break-inside: avoid;
+  }
+  
+  .message-bubble.user {
+    background: #f8f9fa !important;
+    color: var(--text-color) !important;
+  }
+  
+  .message-bubble.assistant {
+    background: #ffffff !important;
+    color: var(--text-color) !important;
+  }
+  
+  .message-meta {
+    opacity: 1;
+  }
+  
+  .message-status::before {
+    display: none;
+  }
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #1a1a1a;
+    --text-color: #e5e5e5;
+    --text-color-light: #a3a3a3;
+    --assistant-message-bg: #2d2d2d;
+    --border-color: #404040;
+  }
+}/* Vali
+dation indicator styling */
+.validation-indicator {
+  position: absolute;
+  top: 50%;
+  right: -20px;
+  transform: translateY(-50%);
+  font-size: 1.25rem;
+  z-index: 10;
+  background: white;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  animation: validationPop 0.3s ease-out;
+}
+
+@keyframes validationPop {
+  0% {
+    transform: translateY(-50%) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(-50%) scale(1.2);
+  }
+  100% {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Ensure the message bubble has relative positioning for absolute positioning of validation indicator */
+.message-bubble.assistant {
+  position: relative;
+}
+
+/* Adjust margin for assistant messages to make room for validation indicator */
+.message-wrapper.assistant {
+  margin-right: 40px;
+}
+
+/* Responsive adjustments for validation indicator */
+@media (max-width: 767px) {
+  .validation-indicator {
+    right: -16px;
+    width: 28px;
+    height: 28px;
+    font-size: 1.1rem;
+  }
+  
+  .message-wrapper.assistant {
+    margin-right: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .validation-indicator {
+    right: -14px;
+    width: 24px;
+    height: 24px;
+    font-size: 1rem;
+  }
+  
+  .message-wrapper.assistant {
+    margin-right: 28px;
+  }
+}
+
+/* High contrast mode support for validation indicator */
+@media (prefers-contrast: high) {
+  .validation-indicator {
+    border: 2px solid var(--text-color);
+    background: white;
+  }
+}
+
+/* Reduced motion support for validation indicator */
+@media (prefers-reduced-motion: reduce) {
+  .validation-indicator {
+    animation: none;
+  }
+}
+
+/* Print styles for validation indicator */
+@media print {
+  .validation-indicator {
+    position: static;
+    display: inline-block;
+    margin-left: 8px;
+    width: auto;
+    height: auto;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}

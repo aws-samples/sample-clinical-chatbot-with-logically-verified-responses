@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Validation Indicator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .test-bubble {
+            background: white;
+            border: 2px dashed #007bff;
+            border-radius: 18px 18px 18px 4px;
+            padding: 12px 16px;
+            margin: 10px 0;
+            position: relative;
+        }
+        .validation-indicator {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 1.25rem;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h2>Validation Indicator Test</h2>
+        
+        <div class="test-bubble">
+            This is a valid response
+            <span class="validation-indicator">✅</span>
+        </div>
+        
+        <div class="test-bubble">
+            This is an invalid response
+            <span class="validation-indicator">❌</span>
+        </div>
+        
+        <div class="test-bubble">
+            This is an unknown response
+            <span class="validation-indicator">❓</span>
+        </div>
+        
+        <div class="test-bubble">
+            This response has no validation
+        </div>
+    </div>
+</body>
+</html>

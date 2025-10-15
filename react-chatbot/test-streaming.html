@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Streaming API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffe6e6; border-left: 4px solid #ff0000; }
+        .success { background: #e6ffe6; border-left: 4px solid #00ff00; }
+        .info { background: #e6f3ff; border-left: 4px solid #0066cc; }
+        .streaming { background: #fff3cd; border-left: 4px solid #ffc107; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; width: 300px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test Streaming API</h1>
+    <div>
+        <input type="text" id="messageInput" placeholder="Enter your message..." value="What is the patient's name?">
+        <button onclick="testStreaming()">Test Streaming</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div id="logs"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            
+            // Create elements safely to prevent XSS
+            const timeElement = document.createElement('strong');
+            timeElement.textContent = new Date().toLocaleTimeString();
+            
+            const messageText = document.createTextNode(': ' + message);
+            
+            logDiv.appendChild(timeElement);
+            logDiv.appendChild(messageText);
+            logs.appendChild(logDiv);
+            console.log(`[${type.toUpperCase()}]`, message);
+        }
+
+        function clearLogs() {
+            const logs = document.getElementById('logs');
+            // Clear children safely instead of using innerHTML
+            while (logs.firstChild) {
+                logs.removeChild(logs.firstChild);
+            }
+        }
+
+        async function testStreaming() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) {
+                log('Please enter a message', 'error');
+                return;
+            }
+
+            log(`Starting streaming request for: "${message}"`, 'info');
+
+            try {
+                const response = await fetch('http://localhost:8000/api/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                if (!response.body) {
+                    throw new Error('No response body received');
+                }
+
+                log('✅ Connected to streaming endpoint', 'success');
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let updateCount = 0;
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        
+                        if (done) {
+                            log('🏁 Streaming completed', 'success');
+                            break;
+                        }
+                        
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const jsonData = line.slice(6); // Remove 'data: ' prefix
+                                    if (jsonData.trim()) {
+                                        const update = JSON.parse(jsonData);
+                                        updateCount++;
+                                        
+                                        log(`📡 Update #${updateCount}: ${JSON.stringify(update, null, 2)}`, 'streaming');
+                                        
+                                        if (update.is_final) {
+                                            log('🎯 Received final update', 'success');
+                                            return;
+                                        }
+                                    }
+                                } catch (parseError) {
+                                    log(`❌ Failed to parse streaming data: ${parseError.message}`, 'error');
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
+
+            } catch (error) {
+                log(`❌ Streaming failed: ${error.message}`, 'error');
+                console.error('Streaming error:', error);
+            }
+        }
+
+        // Auto-focus input and allow Enter key
+        document.getElementById('messageInput').focus();
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testStreaming();
+            }
+        });
+    </script>
+</body>
+</html>

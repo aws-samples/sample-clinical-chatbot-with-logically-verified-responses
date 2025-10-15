@@ -1,0 +1,143 @@
+/* MainLayout component styles */
+
+.main-layout {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  background-color: var(--background-color, #ffffff);
+}
+
+/* Desktop dual-pane layout */
+.main-layout--desktop {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+/* Mobile single-pane layout */
+.main-layout--mobile {
+  flex-direction: column;
+}
+
+/* Chat pane styles */
+.main-layout__chat-pane {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: var(--min-chat-width, 300px);
+  background-color: var(--background-color, #ffffff);
+  border-right: 1px solid var(--border-color, #e1e5e9);
+  overflow: hidden;
+  position: relative;
+  transition: width var(--transition-fast, 0.15s) ease-out;
+}
+
+.main-layout__chat-pane--mobile {
+  width: 100% !important;
+  min-width: unset;
+  border-right: none;
+  flex: 1;
+}
+
+/* Theory pane styles */
+.main-layout__theory-pane {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: var(--min-theory-width, 250px);
+  background-color: var(--theory-section-bg, #fafafa);
+  overflow: hidden;
+  position: relative;
+  transition: width var(--transition-fast, 0.15s) ease-out;
+}
+
+/* Separator container */
+.main-layout__separator-container {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  width: var(--separator-width, 4px);
+  background-color: var(--separator-color, #ddd);
+  cursor: col-resize;
+  user-select: none;
+  z-index: 10;
+  position: relative;
+}
+
+/* Theory section placeholder styles */
+.theory-section {
+  padding: var(--spacing-md, 16px);
+  color: var(--text-color, #333);
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* Responsive breakpoints */
+@media (max-width: 767px) {
+  /* Mobile styles - Single pane layout */
+  .main-layout {
+    flex-direction: column;
+  }
+  
+  .main-layout--desktop {
+    flex-direction: column;
+  }
+  
+  .main-layout__chat-pane {
+    width: 100% !important;
+    min-width: unset;
+    border-right: none;
+    flex: 1;
+    transition: none;
+  }
+  
+  .main-layout__theory-pane {
+    display: none; /* Hide theory section on mobile */
+  }
+  
+  .main-layout__separator-container {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet styles - Fixed dual-pane proportions */
+  .main-layout {
+    flex-direction: row;
+  }
+  
+  .main-layout__chat-pane {
+    width: 70% !important;
+    flex: 0 0 70%;
+    transition: none;
+  }
+  
+  .main-layout__theory-pane {
+    width: 30% !important;
+    flex: 0 0 30%;
+    transition: none;
+  }
+  
+  .main-layout__separator-container {
+    display: none; /* No resizing on tablet */
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop styles - Full resizable dual-pane functionality */
+  .main-layout {
+    flex-direction: row;
+  }
+  
+  .main-layout__separator-container {
+    display: flex;
+  }
+  
+  .main-layout__chat-pane {
+    transition: width var(--transition-fast, 0.15s) ease-out;
+  }
+  
+  .main-layout__theory-pane {
+    transition: width var(--transition-fast, 0.15s) ease-out;
+  }
+}

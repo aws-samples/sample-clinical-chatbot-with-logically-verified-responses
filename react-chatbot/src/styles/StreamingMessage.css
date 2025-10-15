@@ -1,0 +1,19 @@
+/* StreamingMessage component styles */
+
+.streaming-message {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.streaming-message__bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+/* Ensure bubbles appear on the left side like assistant messages */
+.streaming-message__bubbles .progress-bubble {
+  align-self: flex-start;
+}

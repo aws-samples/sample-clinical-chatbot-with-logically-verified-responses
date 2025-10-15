@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Backend Connection</title>
+</head>
+<body>
+    <h1>Testing Backend Connection</h1>
+    <button onclick="testFacts()">Test Facts API</button>
+    <button onclick="testAxioms()">Test Axioms API</button>
+    <div id="results"></div>
+
+    <script>
+        async function testFacts() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing facts API...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/facts');
+                const data = await response.json();
+                results.innerHTML = `<h3>Facts API Success:</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                results.innerHTML = `<h3>Facts API Error:</h3><pre>${error.message}</pre>`;
+                console.error('Facts API Error:', error);
+            }
+        }
+
+        async function testAxioms() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing axioms API...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/axioms');
+                const data = await response.json();
+                results.innerHTML = `<h3>Axioms API Success:</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                results.innerHTML = `<h3>Axioms API Error:</h3><pre>${error.message}</pre>`;
+                console.error('Axioms API Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
+</text>
+</invoke>

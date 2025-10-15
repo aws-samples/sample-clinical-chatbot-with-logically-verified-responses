@@ -1,0 +1,156 @@
+/* ResizableSeparator component styles */
+
+.resizable-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--separator-width, 4px);
+  height: 100%;
+  background-color: var(--separator-color, #ddd);
+  cursor: col-resize;
+  user-select: none;
+  position: relative;
+  transition: all var(--transition-fast, 0.15s) ease;
+  outline: none;
+  z-index: 10;
+}
+
+/* Enhanced hover state with better visual feedback */
+.resizable-separator:hover {
+  background-color: var(--separator-hover-color, #007bff);
+  width: var(--separator-hover-width, 6px);
+  box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Focus state for keyboard navigation */
+.resizable-separator:focus {
+  background-color: var(--separator-hover-color, #007bff);
+  width: var(--separator-hover-width, 6px);
+  box-shadow: 0 0 0 2px var(--primary-color, #007bff), 0 0 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Active/dragging state with enhanced feedback */
+.resizable-separator--dragging,
+.resizable-separator:active {
+  background-color: var(--separator-active-color, #0056b3);
+  width: var(--separator-hover-width, 6px);
+  z-index: 1000;
+  box-shadow: 0 0 12px rgba(0, 86, 179, 0.4);
+}
+
+/* Handle container */
+.resizable-separator__handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 60px;
+  position: relative;
+}
+
+/* Visual grip indicator */
+.resizable-separator__grip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.resizable-separator:hover .resizable-separator__grip,
+.resizable-separator:focus .resizable-separator__grip,
+.resizable-separator--dragging .resizable-separator__grip {
+  opacity: 1;
+}
+
+.resizable-separator__grip-dot {
+  width: 2px;
+  height: 2px;
+  background-color: var(--separator-grip-color, #ffffff);
+  border-radius: 50%;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Responsive behavior */
+@media (max-width: 767px) {
+  .resizable-separator {
+    display: none; /* Hidden on mobile */
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .resizable-separator {
+    display: none; /* Hidden on tablet - fixed layout */
+  }
+}
+
+@media (min-width: 1024px) {
+  .resizable-separator {
+    display: flex; /* Visible on desktop */
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .resizable-separator {
+    background-color: var(--separator-high-contrast, #000);
+    border: 1px solid var(--separator-border-high-contrast, #fff);
+  }
+  
+  .resizable-separator:hover,
+  .resizable-separator:focus {
+    background-color: var(--separator-hover-high-contrast, #333);
+  }
+  
+  .resizable-separator__grip-dot {
+    background-color: var(--separator-grip-high-contrast, #fff);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .resizable-separator {
+    transition: none;
+  }
+  
+  .resizable-separator__grip {
+    transition: none;
+  }
+}
+
+/* Touch device adjustments */
+@media (pointer: coarse) {
+  .resizable-separator {
+    width: 8px; /* Larger touch target */
+  }
+  
+  .resizable-separator:hover {
+    width: 10px;
+  }
+  
+  .resizable-separator__handle {
+    height: 80px; /* Larger touch area */
+  }
+}
+
+/* Print styles */
+@media print {
+  .resizable-separator {
+    display: none;
+  }
+}
