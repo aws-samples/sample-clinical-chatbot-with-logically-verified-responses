@@ -1,0 +1,31 @@
+.chainlit 
+backend/venv/**
+react-chatbot/venv/**
+**/*.pyc
+backend/app/__pycache__/**
+
+# Logs
+react-chatbot/logs
+react-chatbot/*.log
+react-chatbot/npm-debug.log*
+react-chatbot/yarn-debug.log*
+react-chatbot/yarn-error.log*
+react-chatbot/pnpm-debug.log*
+react-chatbot/lerna-debug.log*
+
+react-chatbot/node_modules
+react-chatbot/dist
+react-chatbot/dist-ssr
+react-chatbot/*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+

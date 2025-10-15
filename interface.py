@@ -271,11 +271,14 @@ def process_user_response_streaming(
     that indicate the progress.
     """
     print(f"process_user_response_streaming {user_response} {do_corrupt}")
+    assistant_response: Optional[str] = None
+    corrupted_response: Optional[str] = None
     valid: Optional[str] = None
     original_result: Optional[Result] = None
     negated_result: Optional[Result] = None
     extracted_logical_stmt: Optional[str] = None
     durations: Dict[str, float] = {}
+    error_messages: List[str] = []
     
     try:
         yield ProgressUpdate("Computing initial response...")
@@ -339,28 +342,28 @@ def process_user_response_streaming(
                         for name, timer in timers.items()
                         if timer is not None}
         print(f"durations {durations}")
-        yield FinalSummary(durations=durations,
-                           assistant_response=assistant_response,
-                           corrupted_response=corrupted_response,
-                           extracted_logical_stmt=extracted_logical_stmt,
-                           valid=valid,
-                           original_result=str(original_result),
-                           negated_result=str(negated_result))
     
     except Exception as e:
         import traceback
         print(f"ERROR in process_user_response_streaming: {e}")
         print(f"Full traceback: {traceback.format_exc()}")
-        # Yield an error response
-        yield Response(
-            assistant_response="An error occurred while processing your request.",
-            error_messages=[str(e)]
-        )
+        error_messages += str(e)
+    yield FinalSummary(durations=durations,
+                       assistant_response=assistant_response,
+                       corrupted_response=corrupted_response,
+                       extracted_logical_stmt=extracted_logical_stmt,
+                       valid=valid,
+                       original_result=str(original_result),
+                       negated_result=str(negated_result),
+                       error_messages=error_messages)
 
 def process_user_response(
     user_response: str,
     do_corrupt: bool=True) -> FinalSummary:
-
+    """
+    A wrapper around process_user_response_streaming() that turns it into
+    a non-streaming call.
+    """
     for event in process_user_response_streaming(user_response, do_corrupt):
         print("Got event:")
         rich.print(event)

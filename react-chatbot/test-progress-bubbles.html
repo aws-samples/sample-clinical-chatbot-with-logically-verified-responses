@@ -150,25 +150,60 @@
         function createBubble(content, type, icon, isAnimating = false) {
             const container = document.getElementById('bubbleContainer');
             
+            // Create main bubble element
             const bubble = document.createElement('div');
             bubble.className = `bubble ${isAnimating ? 'animating' : ''}`;
-            bubble.innerHTML = `
-                <div class="bubble-avatar">
-                    <span>${icon}</span>
-                </div>
-                <div class="bubble-content">
-                    <div class="bubble-text">${content}</div>
-                    ${isAnimating ? '<div class="dots"><span></span><span></span><span></span></div>' : ''}
-                </div>
-            `;
             
+            // Create avatar element
+            const avatar = document.createElement('div');
+            avatar.className = 'bubble-avatar';
+            const avatarIcon = document.createElement('span');
+            avatarIcon.textContent = icon;
+            avatar.appendChild(avatarIcon);
+            
+            // Create content element
+            const bubbleContent = document.createElement('div');
+            bubbleContent.className = 'bubble-content';
+            
+            // Create text element
+            const bubbleText = document.createElement('div');
+            bubbleText.className = 'bubble-text';
+            bubbleText.textContent = content;
+            bubbleContent.appendChild(bubbleText);
+            
+            // Add dots if animating
+            if (isAnimating) {
+                const dots = document.createElement('div');
+                dots.className = 'dots';
+                for (let i = 0; i < 3; i++) {
+                    const dot = document.createElement('span');
+                    dots.appendChild(dot);
+                }
+                bubbleContent.appendChild(dots);
+            }
+            
+            // Assemble the bubble
+            bubble.appendChild(avatar);
+            bubble.appendChild(bubbleContent);
             container.appendChild(bubble);
+            
             return bubble;
         }
 
         function clearBubbles() {
             const container = document.getElementById('bubbleContainer');
-            container.innerHTML = '<p style="text-align: center; color: #6c757d; margin-top: 80px;">Click "Simulate Streaming" to see the progress bubbles in action</p>';
+            // Clear all children
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            
+            // Add placeholder message safely
+            const placeholder = document.createElement('p');
+            placeholder.style.textAlign = 'center';
+            placeholder.style.color = '#6c757d';
+            placeholder.style.marginTop = '80px';
+            placeholder.textContent = 'Click "Simulate Streaming" to see the progress bubbles in action';
+            container.appendChild(placeholder);
         }
 
         async function simulateStreaming() {
@@ -223,7 +258,19 @@
             // Show completion message
             setTimeout(() => {
                 const container = document.getElementById('bubbleContainer');
-                container.innerHTML = '<p style="text-align: center; color: #28a745; margin-top: 80px; font-weight: 600;">✅ Streaming completed! Final response would appear as a regular message.</p>';
+                // Clear container safely
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
+                
+                // Add completion message safely
+                const completionMsg = document.createElement('p');
+                completionMsg.style.textAlign = 'center';
+                completionMsg.style.color = '#28a745';
+                completionMsg.style.marginTop = '80px';
+                completionMsg.style.fontWeight = '600';
+                completionMsg.textContent = '✅ Streaming completed! Final response would appear as a regular message.';
+                container.appendChild(completionMsg);
             }, 2000);
         }
 
