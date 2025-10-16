@@ -27,6 +27,7 @@ export interface ChatState {
   error?: string;
   isStreaming?: boolean;
   streamingMessage?: string;
+  doCorrupt?: boolean;
 }
 
 /**

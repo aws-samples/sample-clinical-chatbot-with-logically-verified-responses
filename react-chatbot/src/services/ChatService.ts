@@ -140,12 +140,14 @@ export class ChatService implements IChatService {
    * Sends a message and streams the assistant's response progressively
    * @param content The message content to send
    * @param onUpdate Callback function called for each streaming update
+   * @param doCorrupt Whether to enable response corruption for testing
    * @returns Promise that resolves when streaming is complete
    * @throws ChatServiceError for various error conditions
    */
   async sendMessageStream(
     content: string,
-    onUpdate: (update: StreamingUpdate) => void
+    onUpdate: (update: StreamingUpdate) => void,
+    doCorrupt: boolean = false
   ): Promise<void> {
     if (!content || content.trim().length === 0) {
       throw new ChatServiceError(
@@ -166,7 +168,7 @@ export class ChatService implements IChatService {
     if (this.config.useMockResponses) {
       return this.simulateStreamingResponse(content, onUpdate);
     } else {
-      return this.getStreamingApiResponse(content, onUpdate);
+      return this.getStreamingApiResponse(content, onUpdate, doCorrupt);
     }
   }
 
@@ -187,25 +189,33 @@ export class ChatService implements IChatService {
    * Gets streaming response from the backend API
    * @param content The user's message content
    * @param onUpdate Callback for each streaming update
+   * @param doCorrupt Whether to enable response corruption for testing
    * @returns Promise that resolves when streaming is complete
    */
   private async getStreamingApiResponse(
     content: string,
-    onUpdate: (update: StreamingUpdate) => void
+    onUpdate: (update: StreamingUpdate) => void,
+    doCorrupt: boolean = false
   ): Promise<void> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout * 3); // Longer timeout for streaming
 
     try {
+      console.log('Debug - Making streaming request to:', `${this.config.apiUrl}/api/chat/stream`);
+      console.log('Debug - Request body:', { message: content, do_corrupt: doCorrupt });
+      
       const response = await fetch(`${this.config.apiUrl}/api/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
         },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: content, do_corrupt: doCorrupt }),
         signal: controller.signal,
       });
+      
+      console.log('Debug - Response status:', response.status);
+      console.log('Debug - Response headers:', Object.fromEntries(response.headers.entries()));
 
       clearTimeout(timeoutId);
 

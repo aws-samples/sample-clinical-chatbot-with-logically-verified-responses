@@ -22,6 +22,7 @@ interface FinalSummaryState {
 
 interface StreamingMessageProps {
   message: string;
+  doCorrupt?: boolean;
   onComplete: (
     finalMessage: string, 
     validationStatus?: string, 
@@ -47,6 +48,7 @@ interface ProgressBubbleData {
  */
 export const StreamingMessage: React.FC<StreamingMessageProps> = ({
   message,
+  doCorrupt = false,
   onComplete,
   onError,
 }) => {
@@ -173,7 +175,7 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
       if (abortController.signal.aborted) return;
       
       try {
-        await chatService.sendMessageStream(message, handleStreamingUpdate);
+        await chatService.sendMessageStream(message, handleStreamingUpdate, doCorrupt);
       } catch (error) {
         if (isMounted && !abortController.signal.aborted) {
           onError(error as Error);

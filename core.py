@@ -9,12 +9,12 @@ from multiprocessing import Process, Queue
 import datetime
 import os
 
+from cvc5 import Sort, Term, Kind, Result
+import cvc5
+
 from utils import (pprint_term, convert_date_to_epochal,
                    convert_epochal_to_str, join_fancy,
                    parse_sexpr_from_str, newline)
-
-from cvc5 import Sort, Term, Kind, Result
-import cvc5
 
 diagnosis_date1: int = convert_date_to_epochal("2006-02-01")
 diagnosis_date2: int = convert_date_to_epochal("2006-03-01")
@@ -333,6 +333,9 @@ class InterpolatableFunction (Function):
         return results
 
 class Fact:
+    """
+    Simple facts: a function with some args and a result
+    """
     def __init__(self, function: Function, result, *args: List):
         self.function: Function = function
         self.result = result
@@ -343,6 +346,10 @@ class Fact:
 
 
 class Solver (cvc5.Solver):
+    """
+    A wrapper around a cvc5 Solver with some
+    custom extras, like setting options.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

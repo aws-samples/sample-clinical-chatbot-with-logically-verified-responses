@@ -6,7 +6,12 @@ import type { MessageInputProps } from '../types/components';
  * MessageInput component for sending messages in the chat
  * Provides input field with validation and send functionality
  */
-const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disabled = false }) => {
+const MessageInput: React.FC<MessageInputProps> = ({ 
+  onSendMessage, 
+  disabled = false, 
+  corruptResponses = false,
+  onCorruptResponsesChange 
+}) => {
   // Controlled input state
   const [inputValue, setInputValue] = useState<string>('');
   
@@ -59,7 +64,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disabled = f
     }
     
     const trimmedMessage = inputValue.trim();
-    onSendMessage(trimmedMessage);
+    onSendMessage(trimmedMessage, corruptResponses);
     setInputValue(''); // Clear input after sending
   }, [inputValue, validateMessage, onSendMessage]);
 
@@ -110,6 +115,35 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disabled = f
           Send
         </button>
       </div>
+      
+      {/* Corrupt Responses Toggle */}
+      {onCorruptResponsesChange && (
+        <div className="message-input-options">
+          <label 
+            className="toggle-switch-container"
+            title="When enabled, assistant responses may be intentionally corrupted for testing validation"
+          >
+            <input
+              type="checkbox"
+              className="toggle-switch-input"
+              checked={corruptResponses}
+              onChange={(e) => onCorruptResponsesChange(e.target.checked)}
+              aria-label="Corrupt assistant responses for testing validation"
+            />
+            <span className="toggle-switch-slider">
+              <span className="toggle-switch-icon">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="3" cy="6" r="2" fill="currentColor" className="toggle-off-icon" />
+                  <circle cx="9" cy="6" r="2" fill="currentColor" className="toggle-on-icon" />
+                </svg>
+              </span>
+            </span>
+            <span className="toggle-switch-label">
+              Corrupt assistant responses
+            </span>
+          </label>
+        </div>
+      )}
       
       {/* Instructions for screen readers */}
       <div id="message-input-instructions" className="sr-only">

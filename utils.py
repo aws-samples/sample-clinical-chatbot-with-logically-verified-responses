@@ -164,9 +164,12 @@ def convert_date_to_epochal(date_string: str) -> int:
     >>> convert_date_to_epochal("2006-02-01")
     13180
     """
-    date_format = "%Y-%m-%d"
-    datetime_object = datetime.datetime.strptime(date_string, date_format)
-    timestamp = datetime_object.timestamp()
+    date_format = "%Y-%m-%d %H:%M:%S%z"
+    dt_obj = datetime.datetime.strptime(date_string + " 12:00:00+0000",
+                                        date_format)
+    # print(f"datetime_obj {dt_obj}")
+    timestamp = dt_obj.timestamp()
+    # print(f"timestamp {timestamp}")
     return int(timestamp/(60*60*24))
 
 def convert_epochal_to_str(epochal_date: int) -> str:
@@ -174,9 +177,15 @@ def convert_epochal_to_str(epochal_date: int) -> str:
     >>> convert_epochal_to_str(17167)
     '2017-01-01'
 
+    >>> for unix_time in [17000, 16500, 18000, 180001, 18002]:
+    ...   assert convert_date_to_epochal(convert_epochal_to_str(17000)) == 17000
+    
     """
-    dt_object = datetime.datetime.fromtimestamp(epochal_date * (60 * 60 * 24))
-    return dt_object.strftime("%Y-%m-%d") # %H:%M:%S")
+    epochal_time = epochal_date * (60 * 60 * 24)
+    # print(f"epochal_time {epochal_time}")
+    dt_obj = datetime.datetime.utcfromtimestamp(epochal_time)
+    # print(f"dt_object {dt_obj}")
+    return dt_obj.strftime("%Y-%m-%d") # %H:%M:%S")
 
 def join_fancy(*args: List[str]) -> str:
     """

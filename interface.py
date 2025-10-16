@@ -18,12 +18,22 @@ from utils import Timer, extract_result, newline
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal,
                   check_statement_validity, pprint_term)
 
+logging.getLogger("interface").setLevel(logging.DEBUG)
 logging.basicConfig(
     format="%(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[logging.StreamHandler()],
+    level=logging.DEBUG
 )
-# Enable the debug level specifically for the Strands SDK
-logging.getLogger("interface").setLevel(logging.INFO)
+
+# Configure Strands agents logging
+logging.getLogger("strands").setLevel(logging.DEBUG)
+logging.getLogger("strands.agent").setLevel(logging.DEBUG)
+logging.getLogger("strands.tools").setLevel(logging.DEBUG)
+logging.getLogger("strands.mcp").setLevel(logging.DEBUG)
+
+# Also try some common logger names that might be used
+logging.getLogger("anthropic").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.INFO)  # Keep HTTP requests at INFO to avoid spam
 
 logging.info("Testing logging")
 extraction_model_id = "global.anthropic.claude-sonnet-4-20250514-v1:0"
@@ -72,7 +82,7 @@ def convert_date_to_epochal_tool(date_string: str) -> int:
     Given a date, like '2002-10-05', convert it into an integer
     which is the number of _days_ from the Unix epoch start.
     """
-    print("in convert_date_to_epochal_tool")
+    logging.info("in convert_date_to_epochal_tool")
     return convert_date_to_epochal(date_string)
 
 def extract_logical_statement(nat_lang_statement: str) -> str:
@@ -84,10 +94,12 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
     this_system_prompt = dedent("""\
         You are an expert at first-order logic.
         """)
+    logging.info("Creating extraction agent with model: %s", extraction_model_id)
     this_agent = Agent(system_prompt=this_system_prompt,
                        model=extraction_model_id,
                        tools=[convert_date_to_epochal_tool])
-    print(this_agent.model.config)
+    logging.info("Extraction agent created successfully")
+    logging.info("model config: %s", this_agent.model.config)
     prompt = dedent(f"""\
         Your task is to convert a natural language statement into a first-order logical well-formed formula.
         You have available the following functions:
@@ -109,7 +121,7 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
         So a `time` for the `heart-rate`, `weight`, and `D` relations is always an integer.
 
         To convert a human date to an epochal date, you MUST use the `convert_date_to_epochal_tool`
-        tool.
+        tool. For example, "2005-01-31" should map to 12815 and "2006-01-31" should map to 13180.
 
         You can use first-order logic. For example:
         * ```(= X Y)``` asserts that X and Y are equal.
@@ -135,7 +147,17 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
 
         ```{nat_lang_statement}```
         """)
+    logging.info("Calling extraction agent with prompt length: %d", len(prompt))
     this_response = this_agent(prompt=prompt)
+    logging.info("this_agent has %d messages", len(this_agent.messages))
+    for message in this_agent.messages:
+        logging.info(f">> message {message}")
+        if message.get("role") == "assistant" and "tool_calls" in message.get("content", []):
+            logging.info("Tool call detected:")
+            for tool_call in message["content"]["tool_calls"]:
+                logging.info(f"  Tool Name: {tool_call['function']['name']}")
+                logging.info(f"  Arguments: {tool_call['function']['arguments']}")
+    logging.info("Extraction agent response received, length: %d", len(str(this_response)))
     print(f"response: {this_response}")
     return extract_result(str(this_response))
 
@@ -153,13 +175,17 @@ chatbot_system_prompt = dedent(f"""\
     """)
 print(f"Chatbot system prompt:\n{chatbot_system_prompt}\n===========")
 
+logging.info("Creating chatbot agent with model: %s", chatbot_model_id)
 chatbot_agent = Agent(model=chatbot_model_id, system_prompt=chatbot_system_prompt)
+logging.info("Chatbot agent created successfully")
 print(chatbot_agent.model.config)
 
 def corrupt_response(first_response: str) -> str:
     """ Change the response slightly to mimic a mistake from the chatbot LLM. """
     print(f"corrupt_response {first_response}")
+    logging.info("Creating corruption agent with model: %s", corruption_model_id)
     this_agent = Agent(model=corruption_model_id)
+    logging.info("Corruption agent created successfully")
     prompt = dedent(f"""\
         Your task is to change a sentence slightly so that the meaning is different.
         For example, if you were given the sentence "The patient is 10 years old"
@@ -173,7 +199,9 @@ def corrupt_response(first_response: str) -> str:
 
         You must enclose your response in XML tags: <result>...</result>
         """)
+    logging.info("Calling corruption agent with prompt length: %d", len(prompt))
     this_response = this_agent(prompt=prompt)
+    logging.info("Corruption agent response received, length: %d", len(str(this_response)))
     result = str(this_response)
     print(f"Raw result: {result}")
     result = extract_result(result)
@@ -239,12 +267,14 @@ def process_user_response_streaming(
 
         llm_timer = Timer("LLM")
         with llm_timer:
+            logging.info("Calling chatbot agent with user response: %s", user_response[:100] + "..." if len(user_response) > 100 else user_response)
             assistant_response = chatbot_agent(user_response)
+            logging.info("Chatbot agent response received, length: %d", len(str(assistant_response)))
             assistant_response = str(assistant_response).strip()
         yield ProgressUpdate(f"Initial response: {assistant_response}")
 
         if do_corrupt and choice([True,False]):
-            yield ProgressUpdate(f"Corrupting response...")
+            yield ProgressUpdate("Corrupting response...")
             corrupt_timer = Timer("Extraction")
             with corrupt_timer:
                 corrupted_response = corrupt_response(assistant_response)

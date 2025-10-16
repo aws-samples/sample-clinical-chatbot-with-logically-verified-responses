@@ -25,8 +25,10 @@ export interface MessageProps {
  * Props for the MessageInput component
  */
 export interface MessageInputProps {
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, doCorrupt?: boolean) => void;
   disabled?: boolean;
+  corruptResponses?: boolean;
+  onCorruptResponsesChange?: (enabled: boolean) => void;
 }
 
 /**

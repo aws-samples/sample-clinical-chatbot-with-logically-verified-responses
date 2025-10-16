@@ -20,6 +20,9 @@ const ChatContainer: React.FC = () => {
     streamingMessage: undefined
   });
 
+  // Corrupt responses toggle state
+  const [corruptResponses, setCorruptResponses] = useState<boolean>(false);
+
   // Refs for accessibility
   const liveRegionRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -101,7 +104,7 @@ const ChatContainer: React.FC = () => {
   }, []);
 
   // Handle sending a user message with streaming response
-  const handleSendMessageStream = useCallback(async (content: string) => {
+  const handleSendMessageStream = useCallback(async (content: string, doCorrupt: boolean = false) => {
     if (!content.trim()) {
       setError('Message cannot be empty');
       return;
@@ -133,7 +136,8 @@ const ChatContainer: React.FC = () => {
         messages: [...prev.messages, newMessage],
         error: undefined,
         isStreaming: true,
-        streamingMessage: content.trim()
+        streamingMessage: content.trim(),
+        doCorrupt: doCorrupt
       }));
 
       // Update user message status to sent
@@ -160,7 +164,8 @@ const ChatContainer: React.FC = () => {
               : msg
           ),
           isStreaming: false,
-          streamingMessage: undefined
+          streamingMessage: undefined,
+          doCorrupt: undefined
         }));
       }
 
@@ -205,7 +210,8 @@ const ChatContainer: React.FC = () => {
     setChatState(prev => ({
       ...prev,
       isStreaming: false,
-      streamingMessage: undefined
+      streamingMessage: undefined,
+      doCorrupt: undefined
     }));
   }, [addMessage]);
 
@@ -236,7 +242,8 @@ const ChatContainer: React.FC = () => {
     setChatState(prev => ({
       ...prev,
       isStreaming: false,
-      streamingMessage: undefined
+      streamingMessage: undefined,
+      doCorrupt: undefined
     }));
 
     // Set error state
@@ -327,6 +334,7 @@ const ChatContainer: React.FC = () => {
           {chatState.isStreaming && chatState.streamingMessage && (
             <StreamingMessage
               message={chatState.streamingMessage}
+              doCorrupt={chatState.doCorrupt}
               onComplete={handleStreamingComplete}
               onError={handleStreamingError}
             />
@@ -382,6 +390,8 @@ const ChatContainer: React.FC = () => {
           <MessageInput 
             onSendMessage={handleSendMessageStream}
             disabled={chatState.isStreaming}
+            corruptResponses={corruptResponses}
+            onCorruptResponsesChange={setCorruptResponses}
           />
         </div>
       </div>
