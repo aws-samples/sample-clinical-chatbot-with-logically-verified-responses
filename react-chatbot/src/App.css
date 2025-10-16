@@ -58,15 +58,14 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   background-color: #ffffff;
 }
 
 .app-header {
   padding: 1rem 2rem;
   background-color: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
   text-align: center;
 }
 
@@ -252,7 +251,6 @@
 }
 
 .input-section {
-  border-top: 1px solid #dee2e6;
   padding-top: 1rem;
 }
 

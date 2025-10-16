@@ -30,7 +30,6 @@
 
 .input-section {
   flex-shrink: 0;
-  border-top: 1px solid var(--border-color);
   background-color: var(--background-color);
   padding: var(--spacing-md);
   position: relative;
@@ -265,10 +264,6 @@
 @media (prefers-contrast: high) {
   .chat-content {
     border: 2px solid var(--text-color);
-  }
-  
-  .input-section {
-    border-top: 2px solid var(--text-color);
   }
   
   .error-banner {
