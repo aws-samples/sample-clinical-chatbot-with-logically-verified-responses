@@ -95,7 +95,8 @@ The steps indicated in the diagram are:
         1.	The theorem prover ran out of time (memory, space) and quit.
         1.	The deductions are too complex. This typically happens with quantifiers: theories with quantifiers are undecidable (e.g., how do we prove (forall x (P x))?) and require sophisticated heuristics to guide the deductive inference.
         1.	The statement being checked is outside of the domain of discourse of the theory. For example, the WFF `(= (religion Pope) Catholic)` is neither valid nor invalid with respect to the above theory (step 1).
-9.	Last, the information from the theorem prover (valid/invalid/unknown) is presented to the user along with the response. The current demo just displays the validity of the response to the user. We can easily imagine more elaborate scenarios like fixing the response to make it valid.
+9. We repeat steps 7 and 8 with the negated query. For example, if the extracted logical statement is `(= age 42)` then we also try and prove `(not (= age 42))`. The reason for this is that it is much easier for a deductive theorem prover like cvc5 to show that a statement with quantifiers is invalid than valid.
+10.	Last, the information from the theorem prover (valid/invalid/unknown) is presented to the user along with the response. The current demo just displays the validity of the response to the user. We can easily imagine more elaborate scenarios like fixing the response to make it valid.
 
 
 ## Future directions
