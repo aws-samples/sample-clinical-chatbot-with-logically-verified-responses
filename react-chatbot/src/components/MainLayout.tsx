@@ -19,6 +19,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isTablet, setIsTablet] = useState<boolean>(false);
   
+  // Debug: Log when chat width changes
+  useEffect(() => {
+    console.log('💬 Chat width changed to:', chatWidthPercent, '% (Theory width:', 100 - chatWidthPercent, '%)');
+  }, [chatWidthPercent]);
+  
   // Refs for accessibility
   const layoutAnnouncementRef = useRef<HTMLDivElement>(null);
   const mainLayoutRef = useRef<HTMLDivElement>(null);
@@ -56,11 +61,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
       const newIsMobile = width < 768;
       const newIsTablet = width >= 768 && width < 1024;
       
+      console.log('📱 Window resize detected:', width, 'px. Mobile:', newIsMobile, 'Tablet:', newIsTablet);
+      
       setIsMobile(newIsMobile);
       setIsTablet(newIsTablet);
 
       // Adjust layout for tablet view
       if (newIsTablet && !isMobile) {
+        console.log('📱 Switching to tablet mode, setting chat width to 70%');
         setChatWidthPercent(70); // Fixed 70% for tablet
       }
     };
@@ -73,18 +81,26 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
   // Handle pane resizing
   const handleResize = useCallback((newChatWidth: number) => {
+    console.log('🔄 MainLayout handleResize called with newChatWidth:', newChatWidth);
+    
     // Convert pixel width to percentage
     const containerWidth = window.innerWidth;
     const newPercent = (newChatWidth / containerWidth) * 100;
+    
+    console.log('📏 Container width:', containerWidth, 'New percent:', newPercent);
     
     // Ensure minimum widths are respected
     const minChatPercent = (minChatWidth / containerWidth) * 100;
     const minTheoryPercent = (minTheoryWidth / containerWidth) * 100;
     
+    console.log('📐 Min chat percent:', minChatPercent, 'Min theory percent:', minTheoryPercent);
+    
     const clampedPercent = Math.max(
       minChatPercent,
       Math.min(100 - minTheoryPercent, newPercent)
     );
+    
+    console.log('🔒 Clamped percent:', clampedPercent, 'Theory will be:', 100 - clampedPercent);
     
     setChatWidthPercent(clampedPercent);
     saveLayoutPreference(clampedPercent);
@@ -100,6 +116,35 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
   // Calculate theory width percentage
   const theoryWidthPercent = 100 - chatWidthPercent;
+  
+  // Debug: Log actual rendered dimensions
+  useEffect(() => {
+    const checkDimensions = () => {
+      const chatPane = document.querySelector('.main-layout__chat-pane') as HTMLElement;
+      const theoryPane = document.querySelector('.main-layout__theory-pane') as HTMLElement;
+      const separator = document.querySelector('.main-layout__separator-container') as HTMLElement;
+      
+      if (chatPane && theoryPane) {
+        console.log('📐 Actual dimensions:');
+        console.log('  Chat pane:', chatPane.offsetWidth, 'px');
+        console.log('  Theory pane:', theoryPane.offsetWidth, 'px');
+        console.log('  Separator:', separator?.offsetWidth || 0, 'px');
+        console.log('  Window width:', window.innerWidth, 'px');
+        console.log('  Chat %:', (chatPane.offsetWidth / window.innerWidth * 100).toFixed(1), '%');
+        console.log('  Theory %:', (theoryPane.offsetWidth / window.innerWidth * 100).toFixed(1), '%');
+        
+        // Check if theory pane is too narrow
+        if (theoryPane.offsetWidth < 100) {
+          console.warn('⚠️ Theory pane is very narrow:', theoryPane.offsetWidth, 'px');
+        }
+      }
+    };
+    
+    // Check dimensions after a short delay to allow for rendering
+    const timeoutId = setTimeout(checkDimensions, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [chatWidthPercent, theoryWidthPercent]);
 
   // Handle keyboard navigation for layout
   const handleLayoutKeyDown = useCallback((event: React.KeyboardEvent) => {

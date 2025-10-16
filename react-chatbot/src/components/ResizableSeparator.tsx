@@ -27,8 +27,12 @@ export const ResizableSeparator: React.FC<ResizableSeparatorProps> = ({
     const newChatWidth = dragStateRef.current.initialChatWidth + deltaX;
     const containerWidth = window.innerWidth;
     
+    console.log('🖱️ Mouse move - deltaX:', deltaX, 'newChatWidth:', newChatWidth, 'containerWidth:', containerWidth);
+    
     // Calculate minimum and maximum widths
     const maxChatWidth = containerWidth - minTheoryWidth;
+    
+    console.log('📏 Constraints - minChatWidth:', minChatWidth, 'maxChatWidth:', maxChatWidth, 'minTheoryWidth:', minTheoryWidth);
     
     // Clamp the new width within constraints
     const clampedWidth = Math.max(
@@ -36,12 +40,15 @@ export const ResizableSeparator: React.FC<ResizableSeparatorProps> = ({
       Math.min(maxChatWidth, newChatWidth)
     );
     
+    console.log('🔒 Clamped width:', clampedWidth, 'Theory width will be:', containerWidth - clampedWidth);
+    
     // Call onResize to update the layout
     onResize(clampedWidth);
   }, [minChatWidth, minTheoryWidth, onResize]);
 
   // Handle mouse up to end dragging
   const handleMouseUp = useCallback(() => {
+    console.log('🖱️ Mouse up - ending drag');
     dragStateRef.current.isDragging = false;
     setIsDragging(false);
     
@@ -60,9 +67,14 @@ export const ResizableSeparator: React.FC<ResizableSeparatorProps> = ({
     
     const chatPane = document.querySelector('.main-layout__chat-pane') as HTMLElement;
     
-    if (!chatPane) return;
+    if (!chatPane) {
+      console.error('❌ Chat pane not found during mouse down');
+      return;
+    }
     
     const currentChatWidth = chatPane.offsetWidth;
+    
+    console.log('🖱️ Mouse down - starting drag. Current chat width:', currentChatWidth, 'clientX:', event.clientX);
     
     // Update both state and ref
     dragStateRef.current = {

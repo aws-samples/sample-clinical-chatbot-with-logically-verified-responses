@@ -15,6 +15,7 @@ interface FinalSummaryState {
   negated_result?: string;
   error_messages?: string[];
   progress_messages?: string[];
+  extra_delay?: number;
 }
 
 
@@ -53,12 +54,16 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
   const streamingRef = useRef<{ message: string; isStreaming: boolean }>({ message: '', isStreaming: false });
 
   useEffect(() => {
+    console.log('Debug - StreamingMessage useEffect triggered for message:', message);
+    
     // Prevent duplicate streaming for the same message (React StrictMode protection)
     if (streamingRef.current.message === message && streamingRef.current.isStreaming) {
+      console.log('Debug - Duplicate streaming prevented for same message');
       return;
     }
     
     // Reset state for new message
+    console.log('Debug - Resetting progress bubbles for new message');
     setProgressBubbles([]);
     streamingRef.current = { message, isStreaming: true };
     
@@ -75,7 +80,12 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
         isAnimating
       };
 
-      setProgressBubbles(prev => [...prev, bubble]);
+      console.log('Debug - Adding progress bubble:', bubble.id, content);
+      setProgressBubbles(prev => {
+        const newBubbles = [...prev, bubble];
+        console.log('Debug - Total bubbles now:', newBubbles.length);
+        return newBubbles;
+      });
       return bubble.id;
     };
 
@@ -109,18 +119,35 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
           negated_result: finalEvent.negated_result,
           error_messages: finalEvent.error_messages,
           progress_messages: finalEvent.progress_messages,
+          extra_delay: finalEvent.extra_delay,
         };
         
         console.log('Debug - finalSummary after assignment:', finalSummary);
+        console.log('Debug - extra_delay value:', finalSummary.extra_delay);
 
-        // Remove all progress bubbles after a short delay (0.25 seconds)
+        // Remove all progress bubbles after a delay (default 1000ms + extra_delay if provided)
+        const totalDelay = 1000 + (finalSummary.extra_delay || 0);
+        console.log('Debug - Total delay calculated:', totalDelay, 'ms');
+        
+        // First clear the bubbles after a short delay to show them briefly
         setTimeout(() => {
+          console.log('Debug - First timeout: clearing bubbles after', totalDelay, 'ms');
           if (isMounted) {
+            console.log('Debug - Component still mounted, clearing bubbles now');
             setProgressBubbles([]);
-            
+          }
+        }, totalDelay);
+
+        // Then call onComplete after an additional small delay to ensure bubbles are cleared visually
+        setTimeout(() => {
+          console.log('Debug - Second timeout: calling onComplete after bubbles cleared');
+          if (isMounted) {
             // Use the final summary for the response
-            // Prioritize corrupted_response over assistant_response
-            const finalResponse = finalSummary.corrupted_response || finalSummary.assistant_response;
+            // Only use corrupted_response if it's different from assistant_response
+            const finalResponse = (finalSummary.corrupted_response && 
+                                 finalSummary.corrupted_response !== finalSummary.assistant_response) 
+              ? finalSummary.corrupted_response 
+              : finalSummary.assistant_response;
             
             if (finalResponse) {
               console.log('Debug - Calling onComplete with extracted_logical_stmt:', finalSummary.extracted_logical_stmt);
@@ -138,7 +165,7 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
               onError(new Error('No assistant response received'));
             }
           }
-        }, 1000);
+        }, totalDelay + 100); // Add 100ms buffer to ensure visual clearing
       }
     };
 
@@ -157,6 +184,7 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
     startStreaming();
 
     return () => {
+      console.log('Debug - StreamingMessage component unmounting');
       isMounted = false;
       abortController.abort();
       streamingRef.current.isStreaming = false;

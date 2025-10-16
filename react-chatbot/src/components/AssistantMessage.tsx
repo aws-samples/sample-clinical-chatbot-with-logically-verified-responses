@@ -9,6 +9,21 @@ import '../styles/Message.css';
  */
 const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, totalMessages, onRetry }) => {
   const [showProcessInfo, setShowProcessInfo] = useState(false);
+  
+  // Debug: Track state changes
+  React.useEffect(() => {
+    console.log('🔄 showProcessInfo state changed to:', showProcessInfo, 'for message:', message.id);
+  }, [showProcessInfo, message.id]);
+
+  console.log('🤖 AssistantMessage render - messageId:', message.id, 'showProcessInfo:', showProcessInfo);
+  console.log('🤖 Message data:', {
+    content: message.content?.substring(0, 50) + '...',
+    validationStatus: message.validationStatus,
+    initialResponse: message.initialResponse?.substring(0, 30) + '...',
+    corruptedResponse: message.corruptedResponse?.substring(0, 30) + '...',
+    extractedLogicalStmt: message.extractedLogicalStmt,
+    hasCorruptedResponse: !!message.corruptedResponse
+  });
 
   // Ensure this component only renders assistant messages
   if (message.sender !== 'assistant') {
@@ -18,6 +33,8 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
 
   // Toggle between message content and process information
   const handleBubbleClick = () => {
+    console.log('🖱️ Bubble clicked! Current showProcessInfo:', showProcessInfo, 'Will toggle to:', !showProcessInfo);
+    console.log('🖱️ Message has corruptedResponse:', !!message.corruptedResponse);
     setShowProcessInfo(!showProcessInfo);
   };
 
@@ -50,16 +67,41 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
 
   // Generate process information content as table data
   const getProcessInfo = () => {
-    // Don't show anything if corrupted_response is None/undefined
-    if (!message.corruptedResponse) {
+    console.log('📊 getProcessInfo called');
+    console.log('📊 Available data:', {
+      corruptedResponse: !!message.corruptedResponse,
+      initialResponse: !!message.initialResponse,
+      extractedLogicalStmt: !!message.extractedLogicalStmt,
+      validationStatus: message.validationStatus,
+      durations: !!message.durations
+    });
+    
+    // Show process info if we have any validation-related data
+    const hasProcessData = message.corruptedResponse || 
+                          message.initialResponse || 
+                          message.extractedLogicalStmt || 
+                          message.validationStatus || 
+                          message.durations;
+    
+    if (!hasProcessData) {
+      console.log('📊 No process data available, returning null');
       return null;
     }
 
+    console.log('📊 Building process info table...');
     const rows = [];
 
-    // Initial and corrupted responses
-    rows.push(['Initial response', message.initialResponse || 'Not available']);
-    rows.push(['Corrupted response', message.corruptedResponse]);
+    // Only show initial response if it exists and is different from main content
+    if (message.initialResponse && message.initialResponse !== message.content) {
+      rows.push(['Initial response', message.initialResponse]);
+    }
+    
+    // Only show corrupted response if it exists and is different from other responses
+    if (message.corruptedResponse && 
+        message.corruptedResponse !== message.content && 
+        message.corruptedResponse !== message.initialResponse) {
+      rows.push(['Corrupted response', message.corruptedResponse]);
+    }
 
     // Debug: Log the extracted logical statement
     console.log('Debug - extractedLogicalStmt:', message.extractedLogicalStmt);
@@ -67,19 +109,20 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
     // Extracted logical statement
     if (message.extractedLogicalStmt) {
       rows.push(['Extracted logical statement', message.extractedLogicalStmt]);
-    } else {
-      rows.push(['Extracted logical statement', 'Not available']);
     }
 
     // Results in order: Original result, Negated result, then Valid
-    const originalResult = message.originalResult || 'N/A';
-    rows.push(['Original result', originalResult]);
+    if (message.originalResult) {
+      rows.push(['Original result', message.originalResult]);
+    }
 
-    const negatedResult = message.negatedResult || 'N/A';
-    rows.push(['Negated result', negatedResult]);
+    if (message.negatedResult) {
+      rows.push(['Negated result', message.negatedResult]);
+    }
 
-    const validText = message.validationStatus || 'Unknown';
-    rows.push(['Valid', validText]);
+    if (message.validationStatus) {
+      rows.push(['Valid', message.validationStatus]);
+    }
 
     // Durations summary
     if (message.durations) {
@@ -88,6 +131,8 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
         .join(', ');
       rows.push(['Durations', durationText]);
     }
+    
+    console.log('📊 Generated', rows.length, 'rows:', rows.map(r => r[0]));
 
     return rows;
   };
@@ -108,9 +153,16 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
         <div className="message-content">
           {showProcessInfo ? (
             (() => {
+              console.log('🎭 Rendering process info view');
               const processRows = getProcessInfo();
-              if (!processRows) return null;
+              console.log('🎭 Process rows:', processRows);
+              
+              if (!processRows) {
+                console.log('🎭 No process rows, returning null');
+                return null;
+              }
 
+              console.log('🎭 Rendering table with', processRows.length, 'rows');
               return (
                 <table style={{
                   width: '100%',
@@ -145,17 +197,22 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
               );
             })()
           ) : (
-            <>
-              {message.content}
-              {message.validationStatus && (
-                <span
-                  className="validation-indicator"
-                  aria-label={`Validation status: ${message.validationStatus === 'true' ? 'valid' : message.validationStatus === 'false' ? 'invalid' : 'unknown'}`}
-                >
-                  {getValidationIndicator(message.validationStatus)}
-                </span>
-              )}
-            </>
+            (() => {
+              console.log('🎭 Rendering normal message view');
+              return (
+                <>
+                  {message.content}
+                  {message.validationStatus && (
+                    <span
+                      className="validation-indicator"
+                      aria-label={`Validation status: ${message.validationStatus === 'true' ? 'valid' : message.validationStatus === 'false' ? 'invalid' : 'unknown'}`}
+                    >
+                      {getValidationIndicator(message.validationStatus)}
+                    </span>
+                  )}
+                </>
+              );
+            })()
           )}
         </div>
       </div>

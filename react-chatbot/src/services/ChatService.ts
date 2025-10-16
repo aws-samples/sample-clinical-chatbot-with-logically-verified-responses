@@ -67,6 +67,7 @@ export interface FinalSummary extends BaseEvent {
   negated_result?: string;
   error_messages?: string[];
   progress_messages?: string[];
+  extra_delay?: number; // Additional delay in milliseconds before progress bubbles disappear
 }
 
 /**

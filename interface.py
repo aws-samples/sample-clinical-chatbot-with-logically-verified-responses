@@ -3,28 +3,29 @@ This is an interface between the back-end and the front-end (UX).
 This should make it easier to support multiple front ends.
 """
 
-import datetime, logging, re
+import datetime, logging
 from textwrap import dedent
 from random import choice
 import traceback
 import dataclasses
-from typing import List, Dict, Optional, Iterator, Any
+from typing import List, Dict, Optional, Iterator
 import rich
+
+from cvc5 import Term, Result
+from strands import Agent, tool
 
 from utils import Timer, extract_result, newline
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal,
                   check_statement_validity, pprint_term)
-
-from cvc5 import Term, Result
-from strands import Agent, tool
 
 logging.basicConfig(
     format="%(levelname)s | %(name)s | %(message)s",
     handlers=[logging.StreamHandler()]
 )
 # Enable the debug level specifically for the Strands SDK
-logging.getLogger("strands").setLevel(logging.DEBUG)
+logging.getLogger("interface").setLevel(logging.INFO)
 
+logging.info("Testing logging")
 extraction_model_id = "global.anthropic.claude-sonnet-4-20250514-v1:0"
 # extraction_model_id = "anthropic.claude-opus-4-1-20250805-v1:0"
 # extraction_model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
@@ -36,6 +37,10 @@ FACTS_NAT_LANG: Optional[List[str]] = None
 AXIOMS_AS_STR: Optional[List[str]] = None
 
 def get_facts_nat_lang() -> List[str]:
+    """
+    Return a list of strings (one per line) that represent
+    the facts in English.
+    """
     global FACTS_NAT_LANG
     if FACTS_NAT_LANG is None:
         with solver() as s:
@@ -44,6 +49,10 @@ def get_facts_nat_lang() -> List[str]:
     return FACTS_NAT_LANG
 
 def get_axioms_as_str() -> List[str]:
+    """
+    Similar to get_facts_nat_lang() except each line is a well-formed
+    first-order formula.
+    """
     global AXIOMS_AS_STR
     if AXIOMS_AS_STR is None:
         with solver() as s:
@@ -194,62 +203,7 @@ class FinalSummary (Event):
     original_result: Optional[Result] = None
     negated_result: Optional[Result] = None
     error_messages: Optional[List[str]] = None
-
-    # @classmethod
-    # def whats_new(cls, r1, r2)-> Dict[str,Any]:
-    #     """
-    #     Return a dictionary of attributes that are defined (not-None)
-    #     in r2 and undefined in r1. This is way of seeing what's the
-    #     latest change. Note that the *_messages attributes are a little different:
-    #     we give not the entire array, but just the elements that were added on the end.
-    #     """
-    #     r1_dict = dataclasses.asdict(r1)
-    #     r2_dict = dataclasses.asdict(r2)
-    #     result = {}
-    #     for name, value in r2_dict.items():
-    #         if r1_dict.get(name, None) is None:
-    #             result[name] = value
-    #     for this_name in ["error_messages", "progress_messages"]:
-    #         if this_name in r2_dict and (num_old_mesgs := len(r1_dict.get(this_name, []))) > 0:
-    #             result[this_name] = r2_dict[this_name][num_old_mesgs:]
-    #     return result
-
-    # def is_just_progress_message(self, other) -> bool:
-    #     """
-    #     Type of other is Response.
-    #     Return True if the delta between `self` and `other` is that other
-    #     has one extra `progress_message`
-    #     """
-    #     delta = Response.whats_new(self, other)
-    #     return len(delta) == 1 and len(delta.get("progress_messages", [])) > 0
-    
-    # def add_message(self, mesg_type: str, message):
-        
-    #     return dataclasses.replace(self, **{mesg_type: message})
-
-    # def union(self, r):
-    #     """
-    #     both r and the return value are Response instances.
-    #     """
-    #     logger.info("union")
-    #     logger.info(self)
-    #     logger.info(r)
-    #     r_dict = {k: v for k, v in dataclasses.asdict(r).items() if v is not None}
-    #     rv = dataclasses.replace(self, **r_dict)
-    #     logger.info("union -> {rv}")
-    #     return rv
-    
-    # @classmethod
-    # def message(cls, kind: str, message: str):
-    #     """
-    #     Returns a Response object"
-    #     """
-    #     if kind == "progress":
-    #         return Response(progress_messages=[message], is_message=True)
-    #     elif kind == "error":
-    #         return Response(error_messages=[message], is_message=True)
-    #     else:
-    #         raise Exception("message: {kind} {message}")
+    extra_delay: Optional[float] = None # seconds
 
 @dataclasses.dataclass
 class ProgressUpdate (Event):
@@ -270,7 +224,7 @@ def process_user_response_streaming(
     This is a generator function, that streams a series of `response` instances
     that indicate the progress.
     """
-    print(f"process_user_response_streaming {user_response} {do_corrupt}")
+    logging.info(f"process_user_response_streaming {user_response} {do_corrupt}")
     assistant_response: Optional[str] = None
     corrupted_response: Optional[str] = None
     valid: Optional[str] = None
@@ -297,12 +251,12 @@ def process_user_response_streaming(
                 corrupted_response = str(corrupted_response).strip()
             yield ProgressUpdate(f"Corrupted response: {corrupted_response}")
         else:
-            corrupted_response = assistant_response
+            corrupted_response = None
             corrupt_timer = None
         extract_timer = Timer("Extraction")
         with extract_timer:
             try:
-                extracted_logical_stmt = extract_logical_statement(corrupted_response)
+                extracted_logical_stmt = extract_logical_statement(corrupted_response or assistant_response)
                 print(f"extracted_logical_stmt: {extracted_logical_stmt}")
                 if "unable to extract" in extracted_logical_stmt:
                     extracted_logical_stmt = None
@@ -311,9 +265,7 @@ def process_user_response_streaming(
                 extracted_logical_stmt = None
         yield ProgressUpdate(f"Extracted: <tt>{extracted_logical_stmt}</tt>")
         
-        # Initialize tp_timer as None
         tp_timer = None
-        
         try:
             if extracted_logical_stmt:
                 tp_timer = Timer("theorem prover")
@@ -344,7 +296,6 @@ def process_user_response_streaming(
         print(f"durations {durations}")
     
     except Exception as e:
-        import traceback
         print(f"ERROR in process_user_response_streaming: {e}")
         print(f"Full traceback: {traceback.format_exc()}")
         error_messages += str(e)
@@ -355,7 +306,8 @@ def process_user_response_streaming(
                        valid=valid,
                        original_result=str(original_result),
                        negated_result=str(negated_result),
-                       error_messages=error_messages)
+                       error_messages=error_messages,
+                       extra_delay=5.0)
 
 def process_user_response(
     user_response: str,
@@ -364,11 +316,13 @@ def process_user_response(
     A wrapper around process_user_response_streaming() that turns it into
     a non-streaming call.
     """
+    last_event = None
     for event in process_user_response_streaming(user_response, do_corrupt):
         print("Got event:")
         rich.print(event)
-    assert isinstance(event, FinalSummary)
-    return event
+        last_event = event
+    assert isinstance(last_event, FinalSummary)
+    return last_event
 
 if __name__ == "__main__":
     # user_response = "Is the patient more than 10 years old?"
