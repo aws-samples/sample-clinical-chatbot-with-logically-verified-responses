@@ -109,6 +109,8 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
         // Handle FinalSummary events
         const finalEvent = event as FinalSummary;
         console.log('Debug - FinalSummary event received:', finalEvent);
+        console.log('Debug - assistant_response from event:', finalEvent.assistant_response);
+        console.log('Debug - corrupted_response from event:', finalEvent.corrupted_response);
         console.log('Debug - extracted_logical_stmt from event:', finalEvent.extracted_logical_stmt);
         
         finalSummary = {
@@ -146,13 +148,18 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
           if (isMounted) {
             // Use the final summary for the response
             // Only use corrupted_response if it's different from assistant_response
+            console.log('Debug - finalSummary.assistant_response:', finalSummary.assistant_response);
+            console.log('Debug - finalSummary.corrupted_response:', finalSummary.corrupted_response);
+            console.log('Debug - Are they different?', finalSummary.corrupted_response !== finalSummary.assistant_response);
+            
             const finalResponse = (finalSummary.corrupted_response && 
                                  finalSummary.corrupted_response !== finalSummary.assistant_response) 
               ? finalSummary.corrupted_response 
               : finalSummary.assistant_response;
             
+            console.log('Debug - finalResponse selected:', finalResponse);
+            
             if (finalResponse) {
-              console.log('Debug - Calling onComplete with extracted_logical_stmt:', finalSummary.extracted_logical_stmt);
               onComplete(
                 finalResponse, 
                 finalSummary.valid,

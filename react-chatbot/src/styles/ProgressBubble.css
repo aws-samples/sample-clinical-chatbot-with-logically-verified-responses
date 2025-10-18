@@ -5,7 +5,7 @@
   align-items: flex-start;
   gap: 12px;
   margin: 0;
-  padding: 8px 12px;
+  padding: 4px 12px;
   max-width: 80%;
   animation: slideInLeft 0.3s ease-out;
   opacity: 0.85;
@@ -211,7 +211,7 @@
 @media (max-width: 767px) {
   .progress-bubble {
     max-width: 90%;
-    padding: 10px 12px;
+    padding: 6px 12px;
     gap: 10px;
   }
   

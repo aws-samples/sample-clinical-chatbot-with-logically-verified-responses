@@ -31,6 +31,8 @@ logging.getLogger("strands.agent").setLevel(logging.DEBUG)
 logging.getLogger("strands.tools").setLevel(logging.DEBUG)
 logging.getLogger("strands.mcp").setLevel(logging.DEBUG)
 
+logging.getLogger("botocore").setLevel(logging.INFO)
+
 # Also try some common logger names that might be used
 logging.getLogger("anthropic").setLevel(logging.DEBUG)
 logging.getLogger("httpx").setLevel(logging.INFO)  # Keep HTTP requests at INFO to avoid spam
@@ -103,12 +105,14 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
     prompt = dedent(f"""\
         Your task is to convert a natural language statement into a first-order logical well-formed formula.
         You have available the following functions:
-        * (heart-rate time) -> real. This represents a measurement of the patient's heart rate at a
-          particular `time`. The `time` is Unix-style epochal time. The value of (heart-rate a_time) is a
-          real number indicating the value that was measured at `a_time`.
-        * (weight time) -> real. This represents a measurement of the patient's weight at a
-          particular `time`. The `time` is Unix-style epochal time. The value of (weight a_time) is a
-          real number indicating the value that was measured at `a_time`.
+        * (heart-rate time) -> optional real. This represents a measurement of the patient's heart rate at a
+          particular `time`. The `time` is Unix-style epochal time (an integer).
+          If the heart-rate at `time` is known then the value of (heart-rate a_time) is a
+          real number indicating the value that was measured at `a_time` (represented as `(known <value>)`).
+          If the heart-trate at `time` is unknown then we represent this as `unknown`
+        * (weight time) -> optional real. This represents a measurement of the patient's weight at a
+          particular `time`. This is similar to the `heart-rate` function: the time is an integer and the
+          result is either `unknown` or `(known <x>)`.
         * name -> string. This is a zero-arity function (a constant) whose value is the name of the patient.
         * birth-date -> real. This is a zero-arity function (a constant) whose value is the
           birth date of the patient (represented as Unix-style epochal).
@@ -137,7 +141,7 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
 
         you should convert this into
 
-            ```(= (heart-rate 17167) 45.6)```
+            ```(= (heart-rate 17167) (known 45.6))```
 
         You should return your result in xml tags: <result>....</result>.
 
@@ -273,7 +277,7 @@ def process_user_response_streaming(
             assistant_response = str(assistant_response).strip()
         yield ProgressUpdate(f"Initial response: {assistant_response}")
 
-        if do_corrupt and choice([True,False]):
+        if do_corrupt:
             yield ProgressUpdate("Corrupting response...")
             corrupt_timer = Timer("Extraction")
             with corrupt_timer:
@@ -328,7 +332,8 @@ def process_user_response_streaming(
     except Exception as e:
         print(f"ERROR in process_user_response_streaming: {e}")
         print(f"Full traceback: {traceback.format_exc()}")
-        error_messages += str(e)
+        error_messages.append(str(e))
+    logging.info(f"&&& error_messages {error_messages}")
     yield FinalSummary(durations=durations,
                        assistant_response=assistant_response,
                        corrupted_response=corrupted_response,
@@ -357,7 +362,8 @@ def process_user_response(
 if __name__ == "__main__":
     # user_response = "Is the patient more than 10 years old?"
     # user_response = "What is the patient's name?"
-    test_user_resp = "What is the patient's most recent heart rate measurement?"
+    # test_user_resp = "What is the patient's most recent heart rate measurement?"
+    test_user_resp = "Has the patient's heart rate ever been below 50?"
     response = process_user_response(test_user_resp, do_corrupt=False)
     rich.print(response)
     print("Finished")

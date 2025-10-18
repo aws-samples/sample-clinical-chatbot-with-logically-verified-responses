@@ -17,13 +17,16 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
 
   console.log('🤖 AssistantMessage render - messageId:', message.id, 'showProcessInfo:', showProcessInfo);
   console.log('🤖 Message data:', {
-    content: message.content?.substring(0, 50) + '...',
+    content: message.content,
+    contentLength: message.content?.length,
     validationStatus: message.validationStatus,
-    initialResponse: message.initialResponse?.substring(0, 30) + '...',
-    corruptedResponse: message.corruptedResponse?.substring(0, 30) + '...',
+    initialResponse: message.initialResponse,
+    corruptedResponse: message.corruptedResponse,
     extractedLogicalStmt: message.extractedLogicalStmt,
     hasCorruptedResponse: !!message.corruptedResponse
   });
+  
+
 
   // Ensure this component only renders assistant messages
   if (message.sender !== 'assistant') {
@@ -91,15 +94,13 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
     console.log('📊 Building process info table...');
     const rows = [];
 
-    // Only show initial response if it exists and is different from main content
-    if (message.initialResponse && message.initialResponse !== message.content) {
+    // Always show initial response if it exists
+    if (message.initialResponse) {
       rows.push(['Initial response', message.initialResponse]);
     }
     
-    // Only show corrupted response if it exists and is different from other responses
-    if (message.corruptedResponse && 
-        message.corruptedResponse !== message.content && 
-        message.corruptedResponse !== message.initialResponse) {
+    // Show corrupted response if it exists and is different from initial response
+    if (message.corruptedResponse && message.corruptedResponse !== message.initialResponse) {
       rows.push(['Corrupted response', message.corruptedResponse]);
     }
 

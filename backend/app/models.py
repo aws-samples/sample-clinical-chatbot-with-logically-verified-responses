@@ -14,6 +14,10 @@ class ChatRequest(BaseModel):
         max_length=1000,
         description="The user's message to send to the chatbot"
     )
+    do_corrupt: bool = Field(
+        default=False,
+        description="Whether to enable response corruption for testing validation"
+    )
     
     @field_validator('message')
     @classmethod

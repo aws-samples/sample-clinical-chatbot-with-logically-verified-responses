@@ -139,7 +139,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               </span>
             </span>
             <span className="toggle-switch-label">
-              Corrupt assistant responses
+              Corrupt assistant's responses
             </span>
           </label>
         </div>

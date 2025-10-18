@@ -2,11 +2,12 @@
 
 .main-layout {
   display: flex;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   overflow: hidden;
   position: relative;
   background-color: var(--background-color, #ffffff);
+  flex: 1; /* Make sure it takes up available space */
 }
 
 /* Desktop dual-pane layout */

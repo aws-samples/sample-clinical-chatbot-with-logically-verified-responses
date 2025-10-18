@@ -3,7 +3,7 @@ Code to help represent the facts in the medical records and to transform
 those into a theory (a set of WFFs)
 """
 
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Dict
 from contextlib import contextmanager
 from multiprocessing import Process, Queue
 import datetime
@@ -46,26 +46,26 @@ class Function:
     Represents a relation/function for which we will later create Facts.
     """
     def __init__(self,
-                 solver, # type is Solver
+                 cvc5_solver, # type is Solver
                  name: str,
                  return_sort: Sort,
                  return_units: Optional[Tuple[str, str]], # singular, plural
                  args: List[Tuple[str, Sort]] = None):
         self.name = name
-        self._solver = solver
+        self.solver = cvc5_solver
         self.return_sort = return_sort
         self.args = args if args is not None else []
         self.arg_names = [name for name, _sort in self.args]
         self.arg_sorts = [sort for _name, sort in self.args]
         self.return_units = return_units
         if len(self.args) > 0:
-            this_sort = self._solver.mkFunctionSort(self.arg_sorts,
+            this_sort = self.solver.mkFunctionSort(self.arg_sorts,
                                                     return_sort)
             # print(f"{name} has function sort: {this_sort}")
         else:
             this_sort = return_sort
-        self.cvc5_const = self._solver.mkConst(this_sort, name)
-        self._solver.add_function(self)
+        self.cvc5_const = self.solver.mkConst(this_sort, name)
+        self.solver.add_function(self)
 
     def __str__(self):
         return f"Function ({self.name} {', '.join(map(str, self.args))} -> {self.return_sort})"
@@ -78,22 +78,33 @@ class Function:
         fact has type Fact
         """
         # print(f"as_natural_language")
+        s = self.solver
         pprint_name = self.name.replace("_", " ").replace("-", " ")
         def add_units(value, units: Tuple[str, str]):
+            print(f"add_units {value} {type(value)}")
+            if isinstance(value, Term) and value.getSort() == s.opt_real_sort:
+                tm = s.mkTerm(Kind.APPLY_SELECTOR,
+                              s.opt_real_sort.getDatatype()["known"].getSelector("value").getTerm(),
+                              value)
+                print(f"tm {tm}")
+                tm = s.simplify(tm)
+                print(f"tm {tm}")
+                value = tm
+                print(f"value now {value} {type(value)}")
             if units:
-                if isinstance(value, (int, float)):
+                if isinstance(value, (int, float)) :
                     return f"{value} {units[0]}" if value == 1 \
                         else f"{value} {units[1]}"
-                elif isinstance(value, str):
+                elif isinstance(value, (str, Term)):
                     return f"{value} {units[0]}" # @todo needs work
                 else:
                     raise Exception(f"port me: {fact}")
             else:
                 return value
         if self.name == "D":
-            ICD_, time_ = fact.args
-            maybe_not = "not " if fact.result == self._solver.mk_tfu_false() else ""
-            return f"The patient was diagnosed as {maybe_not}having {ICD_}"\
+            icd_, time_ = fact.args
+            maybe_not = "not " if fact.result == self.solver.mk_tfu_false() else ""
+            return f"The patient was diagnosed as {maybe_not}having {icd_}"\
                    f" on {convert_epochal_to_str(time_)}"
         elif len(self.args) > 0:
             if "time" in self.arg_names:
@@ -125,7 +136,7 @@ class Function:
         """
         relevant_facts = [fact for fact in facts if self == fact.function]
         results = []
-        s = self._solver
+        s = self.solver
         for fact in relevant_facts:
             # print(f"fact.args {fact.args} fact.result {fact.result}")
             if fact.function.name == "D":
@@ -159,18 +170,25 @@ class Function:
         """
         if self.name in {"D"}:
             return [] # these are handled in InterpolatedFunction
-        # print(f"generate_CWA_axioms_for_others {self.name}")
-        s = self._solver
+        print(f"generate_CWA_axioms_for_others {self.name}")
+        s = self.solver
         relevant_facts = [fact for fact in facts if self == fact.function]
+        print(f"relevant facts: {relevant_facts}")
         results = []
         print(f"self.args {self.args}")
         if len(self.args) > 0: # otherwise it's a constant, no need for CWA
             formal_args = [s.mkVar(arg_sort, arg_name)
                            for arg_name, arg_sort in self.args]
             print(f"formal_args {formal_args}")
-            undefined = s.undefined_real if self.return_sort == s.getRealSort() else \
-                            s.undefined_str if self.return_sort == s.getStringSort() else \
-                               None # this signals an error
+            if self.return_sort == s.opt_real_sort:
+                undefined = s.mk_opt_real_unknown()
+            elif self.return_sort == s.tfu_sort:
+                undefined = s.mk_tfu_true_or_false()
+            else:
+                raise Exception(f"port me: {self.return_sort}")
+            # undefined = s.undefined_real if self.return_sort == s.getRealSort() else \
+            #                 s.undefined_str if self.return_sort == s.getStringSort() else \
+            #                    None # this signals an error
             # if formal-args are A and B:
             # (forall (A B)
             #   (= (and (not (and (= A fact_0_A) (= B fact_0_B)))
@@ -241,7 +259,7 @@ class InterpolatableFunction (Function):
         """
         print(f"IF::generate_CWA_axioms_for_diagnosis {self}")
         assert self.name == "D"
-        s = self._solver
+        s = self.solver
         relevant_facts = [fact for fact in facts if self == fact.function]
         observed_ICDs = {fact.args[0] for fact in relevant_facts}
         print(f"observed ICDs: {observed_ICDs}")
@@ -314,7 +332,7 @@ class InterpolatableFunction (Function):
             axiom = s.forall([ICD, time],
                         s.equal(s.lt(time, s.mkInteger(min_time)),
                                 s.equal(s.apply(self, [ICD, time]),
-                                        s.mk_tfu_unknown())),
+                                        s.mk_tfu_true_or_false())),
                         s.mkTerm(Kind.INST_PATTERN_LIST, trigger))
             results.append(axiom)
 
@@ -340,6 +358,11 @@ class Fact:
         self.function: Function = function
         self.result = result
         self.args = args
+
+    def __str__(self):
+        return f"Fact({self.function.name} {self.args} -> {self.result})"
+
+    def __repr__(self): return self.__str__()
 
     def as_natural_language(self):
         return self.function.as_natural_language(self)
@@ -379,20 +402,32 @@ class Solver (cvc5.Solver):
         # TFU = True, False, or Unknown.
         #
         self.tfu_decl = self.mkDatatypeDecl("TFU")
-        true_constructor = self.mkDatatypeConstructorDecl("tfu_true")
-        self.tfu_decl.addConstructor(true_constructor)
-        false_constructor = self.mkDatatypeConstructorDecl("tfu_false")
-        self.tfu_decl.addConstructor(false_constructor)
-        unknown_constructor = self.mkDatatypeConstructorDecl("tfu_unknown")
-        self.tfu_decl.addConstructor(unknown_constructor)
+        true_ctor = self.mkDatatypeConstructorDecl("tfu_true")
+        self.tfu_decl.addConstructor(true_ctor)
+        false_ctor = self.mkDatatypeConstructorDecl("tfu_false")
+        self.tfu_decl.addConstructor(false_ctor)
+        unknown_ctor = self.mkDatatypeConstructorDecl("tfu_true_or_false")
+        self.tfu_decl.addConstructor(unknown_ctor)
 
         # print(f"tfu_decl = {self.tfu_decl}")
         self.tfu_sort = self.mkDatatypeSort(self.tfu_decl)
         self.tfu = self.tfu_sort.getDatatype()
 
-        self.undefined_real = self.mkReal(-666.0)
+        # self.undefined_real = self.mkReal(-666.0)
         self.undefined_str = self.mkString("%%undefined%%")
         self.tfu_cache: Dict[str, Term] = None
+        #
+        # optReal = Either a Real or unknown
+        #
+        self.opt_real_decl = self.mkDatatypeDecl("optReal")
+        known_ctor = self.mkDatatypeConstructorDecl("known")
+        known_ctor.addSelector("value", self.getRealSort())
+        self.opt_real_decl.addConstructor(known_ctor)
+        unknown_ctor = self.mkDatatypeConstructorDecl("unknown")
+        self.opt_real_decl.addConstructor(unknown_ctor)
+        
+        self.opt_real_sort = self.mkDatatypeSort(self.opt_real_decl)
+        self.opt_real = self.opt_real_sort.getDatatype()
 
     def __del__(self):
         print(f"Destroying {self}")
@@ -432,13 +467,29 @@ class Solver (cvc5.Solver):
             self.tfu_cache = {
                 which: self.mkTerm(Kind.APPLY_CONSTRUCTOR,
                                    self.tfu.getConstructor(f"tfu_{which}").getTerm())
-                for which in ["true", "false", "unknown"]
+                for which in ["true", "false", "true_or_false"]
             }
         return self.tfu_cache[which]
 
-    def mk_tfu_true(self) -> Term:    return self.mk_tfu("true")
-    def mk_tfu_false(self) -> Term:   return self.mk_tfu("false")
-    def mk_tfu_unknown(self) -> Term: return self.mk_tfu("unknown")
+    def mk_tfu_true(self) -> Term:          return self.mk_tfu("true")
+    def mk_tfu_false(self) -> Term:         return self.mk_tfu("false")
+    def mk_tfu_true_or_false(self) -> Term: return self.mk_tfu("true_or_false")
+
+    def mk_opt_real(self, which: str,
+                    value: Optional[Union[float, Term]]= None) -> Term:
+        if which == "known":
+            args = [self.mkReal(value)] if isinstance(value, float) else [value]
+        else:
+            args = []
+        print(f"in mk_opt_real, args {args} {[type(x) for x in args]}")
+        return self.mkTerm(Kind.APPLY_CONSTRUCTOR,
+                           self.opt_real.getConstructor(which).getTerm(),
+                           *args)
+
+    def mk_opt_real_known(self, x: float) -> Term:
+        return self.mk_opt_real("known", x)
+    def mk_opt_real_unknown(self) -> Term:
+        return self.mk_opt_real("unknown")
 
     def find_by_name(self, func_name: str) -> Function:
         for func in self.all_functions:
@@ -477,14 +528,20 @@ class Solver (cvc5.Solver):
         (= 42 43)
         """
         print(f"sexpr_to_term {sexpr} {type(sexpr)} vars {variables}")
-        print("here0")
         if variables is None:
             variables = []
-        print("here")
         print(f"all_functions: {self.all_functions}")
         funcs_hash = {f.name: f for f in self.all_functions}
         print(f"funcs_hash: {funcs_hash}")
-        if not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
+        if not isinstance(sexpr, list) and sexpr == "unknown":
+            rv = self.mk_opt_real_unknown()
+        elif isinstance(sexpr, list) and len(sexpr) == 2 and sexpr[0] == "known":
+            value = self.sexpr_to_term(sexpr[1], variables)
+            if isinstance(value, int):
+                value = float(value)
+            print(f"making known term {value} {type(value)}")
+            rv = self.mk_opt_real_known(value)
+        elif not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
             func_term = funcs_hash[sexpr].cvc5_const
             rv = func_term
         elif isinstance(sexpr, list) and sexpr[0] in funcs_hash:
@@ -557,8 +614,8 @@ class Solver (cvc5.Solver):
             return self.mk_tfu_true()
         if isinstance(x, str) and x == "tfu_false":
             return self.mk_tfu_false()
-        if isinstance(x, str) and x == "tfu_unknown":
-            return self.mk_tfu_unknown()
+        if isinstance(x, str) and x == "tfu_true_or_false":
+            return self.mk_tfu_true_or_false()
         if isinstance(x, str) and x == "true":
             return self.mkBoolean(True)
         if isinstance(x, str) and x == "false":
@@ -722,11 +779,11 @@ class Solver (cvc5.Solver):
                                 return_sort=self.getRealSort(),
                                 return_units=("year", "years"))
         heart_rate_function = Function(self, "heart-rate",
-                                return_sort=self.getRealSort(),
+                                return_sort=self.opt_real_sort,
                                 return_units=("beat/sec", "beats/sec"),
                                 args=[("time", self.getIntegerSort())])
         weight_function = Function(self, "weight",
-                                return_sort=self.getRealSort(),
+                                return_sort=self.opt_real_sort,
                                 return_units=("pound", "pounds"),
                                 args=[("time", self.getIntegerSort())])
         diagnosis_function = InterpolatableFunction(
@@ -740,10 +797,10 @@ class Solver (cvc5.Solver):
             Fact(name_function, "Joe Bloggs"),
             Fact(birth_date_function, _birth_date),
             Fact(age_function, (today - _birth_date)/365),
-            Fact(heart_rate_function, 55.0, convert_date_to_epochal("2005-02-01")),
-            Fact(heart_rate_function, 60.0, convert_date_to_epochal("2006-02-01")),
-            Fact(weight_function, 150.0, convert_date_to_epochal("2005-02-01")),
-            Fact(weight_function, 155.0, convert_date_to_epochal("2006-02-01")),
+            Fact(heart_rate_function, self.mk_opt_real_known(55.0), convert_date_to_epochal("2005-02-01")),
+            Fact(heart_rate_function, self.mk_opt_real_known(60.0), convert_date_to_epochal("2006-02-01")),
+            Fact(weight_function, self.mk_opt_real_known(150.0), convert_date_to_epochal("2005-02-01")),
+            Fact(weight_function, self.mk_opt_real_known(155.0), convert_date_to_epochal("2006-02-01")),
             Fact(diagnosis_function, self.mk_tfu_true(),
                      "E11", diagnosis_date1),
             Fact(diagnosis_function, self.mk_tfu_false(),
@@ -920,27 +977,27 @@ def test_diagnosis():
     And another of False on diagnosis_date2
     """
     for idx, (date_, value, expected_validity) in enumerate([
-        (diagnosis_date1 - delta, "tfu_true",    "false"),
-        (diagnosis_date1 - delta, "tfu_false",   "false"),
-        (diagnosis_date1 - delta, "tfu_unknown", "true"),
-        (diagnosis_date1,         "tfu_true",    "true"),
-        (diagnosis_date1,         "tfu_false",   "false"),
-        (diagnosis_date1,         "tfu_unknown", "false"),
-        (diagnosis_date1 + delta, "tfu_true",    "true"),
-        (diagnosis_date1 + delta, "tfu_false",   "false"),
-        (diagnosis_date1 + delta, "tfu_unknown", "false"),
-        (diagnosis_date2,         "tfu_true",    "false"),
-        (diagnosis_date2,         "tfu_false",   "true"),
-        (diagnosis_date2,         "tfu_unknown", "false"),
-        (diagnosis_date2 + delta, "tfu_true",    "false"),
-        (diagnosis_date2 + delta, "tfu_false",   "true"),
-        (diagnosis_date2 + delta, "tfu_unknown", "false"),
-        (diagnosis_date3,         "tfu_true",    "true"),
-        (diagnosis_date3,         "tfu_false",   "false"),
-        (diagnosis_date3,         "tfu_unknown", "false"),
-        (diagnosis_date3 + delta, "tfu_true",    "true"),
-        (diagnosis_date3 + delta, "tfu_false",   "false"),
-        (diagnosis_date3 + delta, "tfu_unknown", "false"),
+        (diagnosis_date1 - delta, "tfu_true",          "false"),
+        (diagnosis_date1 - delta, "tfu_false",         "false"),
+        (diagnosis_date1 - delta, "tfu_true_or_false", "true"),
+        (diagnosis_date1,         "tfu_true",          "true"),
+        (diagnosis_date1,         "tfu_false",         "false"),
+        (diagnosis_date1,         "tfu_true_or_false", "false"),
+        (diagnosis_date1 + delta, "tfu_true",          "true"),
+        (diagnosis_date1 + delta, "tfu_false",         "false"),
+        (diagnosis_date1 + delta, "tfu_true_or_false", "false"),
+        (diagnosis_date2,         "tfu_true",          "false"),
+        (diagnosis_date2,         "tfu_false",         "true"),
+        (diagnosis_date2,         "tfu_true_or_false", "false"),
+        (diagnosis_date2 + delta, "tfu_true",          "false"),
+        (diagnosis_date2 + delta, "tfu_false",         "true"),
+        (diagnosis_date2 + delta, "tfu_true_or_false", "false"),
+        (diagnosis_date3,         "tfu_true",          "true"),
+        (diagnosis_date3,         "tfu_false",         "false"),
+        (diagnosis_date3,         "tfu_true_or_false", "false"),
+        (diagnosis_date3 + delta, "tfu_true",          "true"),
+        (diagnosis_date3 + delta, "tfu_false",         "false"),
+        (diagnosis_date3 + delta, "tfu_true_or_false", "false"),
         ]):
         print(">>>", date_, value, expected_validity)
         test_stmt = f'(= (D "E11" {date_}) {value})'

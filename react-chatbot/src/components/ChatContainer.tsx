@@ -190,8 +190,6 @@ const ChatContainer: React.FC = () => {
     negatedResult?: string,
     durations?: Record<string, number>
   ) => {
-    console.log('Debug - ChatContainer received extractedLogicalStmt:', extractedLogicalStmt);
-    
     // Add the final assistant message with validation status stored separately
     addMessage({
       content: finalMessage,

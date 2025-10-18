@@ -156,8 +156,8 @@ async def send_message(request: ChatRequest):
         logger.info(f"Received chat request: {request.message[:50]}...")
         
         # Process the message using the theorem prover interface directly
-        logger.info("Attempting to use theorem prover interface...")
-        response_obj = process_user_response(request.message, do_corrupt=True)
+        logger.info(f"Attempting to use theorem prover interface with do_corrupt={request.do_corrupt}...")
+        response_obj = process_user_response(request.message, do_corrupt=request.do_corrupt)
         
         logger.info(f"✅ Theorem prover response: {response_obj.assistant_response[:50]}...")
         
@@ -232,8 +232,8 @@ async def send_message_stream(request: ChatRequest):
                 
                 # Use the streaming function from interface with suppressed output
                 with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                    logger.info("about to call process_user_response_streaming")
-                    for idx, event_obj in enumerate(process_user_response_streaming(request.message, do_corrupt=True)):
+                    logger.info(f"about to call process_user_response_streaming with do_corrupt={request.do_corrupt}")
+                    for idx, event_obj in enumerate(process_user_response_streaming(request.message, do_corrupt=request.do_corrupt)):
                         logger.info(f"{idx}>>>>> {event_obj}")
                         
                         # Helper function to safely get JSON-serializable values
