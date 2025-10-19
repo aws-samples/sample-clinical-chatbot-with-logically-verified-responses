@@ -333,7 +333,7 @@ def process_user_response_streaming(
     
     except Exception as ex:
         logging.error("ERROR in process_user_response_streaming: %s", str(ex), exc_info=ex, stack_info=True)
-        error_messages.append(str(e))
+        error_messages.append(str(ex))
     yield FinalSummary(durations=durations,
                        assistant_response=assistant_response,
                        corrupted_response=corrupted_response,

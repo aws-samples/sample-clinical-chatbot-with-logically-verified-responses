@@ -6,8 +6,7 @@ those into a theory (a set of WFFs)
 from typing import List, Tuple, Union, Optional, Dict
 from contextlib import contextmanager
 from multiprocessing import Process, Queue
-import datetime
-import os
+import datetime, os, logging
 
 from cvc5 import Sort, Term, Kind, Result
 import cvc5
@@ -15,6 +14,12 @@ import cvc5
 from utils import (pprint_term, convert_date_to_epochal,
                    convert_epochal_to_str, join_fancy,
                    parse_sexpr_from_str, newline)
+
+logging.getLogger("core").setLevel(logging.INFO)
+logging.basicConfig(
+    format="%(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler()],
+    level=logging.INFO)
 
 diagnosis_date1: int = convert_date_to_epochal("2006-02-01")
 diagnosis_date2: int = convert_date_to_epochal("2006-03-01")
@@ -481,13 +486,14 @@ class Solver (cvc5.Solver):
             args = [self.mkReal(value)] if isinstance(value, float) else [value]
         else:
             args = []
-        print(f"in mk_opt_real, args {args} {[type(x) for x in args]}")
+        logging.info(f"in mk_opt_real, args %s %s", args, [type(x) for x in args])
         return self.mkTerm(Kind.APPLY_CONSTRUCTOR,
                            self.opt_real.getConstructor(which).getTerm(),
                            *args)
 
     def mk_opt_real_known(self, x: float) -> Term:
         return self.mk_opt_real("known", x)
+
     def mk_opt_real_unknown(self) -> Term:
         return self.mk_opt_real("unknown")
 
@@ -495,7 +501,7 @@ class Solver (cvc5.Solver):
         for func in self.all_functions:
             if func.name == func_name:
                 return func
-        raise Exception(f"unknown function: <{func_name}>")
+        raise Exception(f"unknown function: {func_name}")
 
     def sexpr_str_to_term(self, sexpr_str: str) -> Term:
         """
@@ -527,19 +533,19 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        print(f"sexpr_to_term {sexpr} {type(sexpr)} vars {variables}")
+        logging.info(f"sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
-        print(f"all_functions: {self.all_functions}")
+        logging.info(f"all_functions: %s", self.all_functions)
         funcs_hash = {f.name: f for f in self.all_functions}
-        print(f"funcs_hash: {funcs_hash}")
+        logging.info(f"funcs_hash: %s", funcs_hash)
         if not isinstance(sexpr, list) and sexpr == "unknown":
             rv = self.mk_opt_real_unknown()
         elif isinstance(sexpr, list) and len(sexpr) == 2 and sexpr[0] == "known":
             value = self.sexpr_to_term(sexpr[1], variables)
             if isinstance(value, int):
                 value = float(value)
-            print(f"making known term {value} {type(value)}")
+            logging.info(f"making known term %s %s", value, type(value))
             rv = self.mk_opt_real_known(value)
         elif not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
             func_term = funcs_hash[sexpr].cvc5_const
