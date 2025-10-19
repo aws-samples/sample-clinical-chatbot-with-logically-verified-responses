@@ -1,7 +1,7 @@
 """
 Utilities functions
 """
-import re
+import re, logging
 from typing import List
 import datetime
 from time import perf_counter
@@ -10,6 +10,12 @@ from io import StringIO
 from cvc5 import Kind, Term
 
 newline = "\n"
+
+logging.getLogger("utils").setLevel(logging.DEBUG)
+logging.basicConfig(
+    format="%(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler()],
+    level=logging.DEBUG)
 
 class Timer:
     """
@@ -41,7 +47,9 @@ def extract_result(text: str) -> str:
     """
     pattern = r"<result>\s*(.*?)\s*</result>"
     matches = re.findall(pattern, text, re.DOTALL)
-    return matches[-1].strip() if len(matches) > 0 else None
+    rv = matches[-1].strip() if len(matches) > 0 else None
+    logging.info("extract_result -> %s", rv)
+    return rv
 
 def parse_sexpr_from_str(sexpr: str, verbose: bool=False):
     """
@@ -250,7 +258,7 @@ class IndentedIO (StringIO):
             else:
                 self._curr_indent += 1
 
-def pprint_term(term: Term, indent: int = 0):
+def pprint_term(term: Term, indent: int = 0) -> str:
     """
     Print a term, indented in a reasonable way.
     """
@@ -260,18 +268,22 @@ def pprint_term(term: Term, indent: int = 0):
     else:
         return pprint_term2(term, True, indent)
 
-def pprint_term2(term: Term, with_newlines: bool, indent: int = 0):
+def pprint_term2(term: Term, with_newlines: bool, indent: int = 0) -> str:
     """
     A wrapper around _pprint_term() that takes care
     of the IndentedIO buffer.
     """
+    logging.info("pprint_term2 %s %s %d", str(term), str(with_newlines), indent)
     buf = IndentedIO(curr_indent=indent)
     _pprint_term(term, buf, with_newlines)
-    return buf.getvalue()
+    rv = buf.getvalue()
+    logging.info("pprint_term2 %s -> %s", str(term), rv)
+    return rv
 
 def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
+    logging.info("_pprint_term %s %s", str(term), type(term))
     kind = term.getKind()
-    # print(f"_pprint_term {term} {kind}")
+    logging.info("kind %s", str(kind))
     maybe_newline = "\n" if with_newlines else " "
     kind_name = str(kind)[5:].lower()
     if kind in {Kind.FORALL, Kind.EXISTS}:

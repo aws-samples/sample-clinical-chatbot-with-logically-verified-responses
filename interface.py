@@ -155,14 +155,14 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
     this_response = this_agent(prompt=prompt)
     logging.info("this_agent has %d messages", len(this_agent.messages))
     for message in this_agent.messages:
-        logging.info(f">> message {message}")
+        logging.info(">> message %s", message)
         if message.get("role") == "assistant" and "tool_calls" in message.get("content", []):
             logging.info("Tool call detected:")
             for tool_call in message["content"]["tool_calls"]:
-                logging.info(f"  Tool Name: {tool_call['function']['name']}")
-                logging.info(f"  Arguments: {tool_call['function']['arguments']}")
+                logging.info("  Tool Name: %s", tool_call['function']['name'])
+                logging.info("  Arguments: %s", tool_call['function']['arguments'])
     logging.info("Extraction agent response received, length: %d", len(str(this_response)))
-    print(f"response: {this_response}")
+    logging.info("response: %s", str(this_response))
     return extract_result(str(this_response))
 
 chatbot_system_prompt = dedent(f"""\
@@ -290,12 +290,15 @@ def process_user_response_streaming(
         extract_timer = Timer("Extraction")
         with extract_timer:
             try:
+                logging.info("in here")
                 extracted_logical_stmt = extract_logical_statement(corrupted_response or assistant_response)
-                print(f"extracted_logical_stmt: {extracted_logical_stmt}")
+                logging.info("extracted_logical_stmt: %s", extracted_logical_stmt)
                 if "unable to extract" in extracted_logical_stmt:
                     extracted_logical_stmt = None
+                # extracted_logical_stmt = pprint_term(self.sexpr_str_to_term(extracted_logical_stmt))
+                # logging.info("extracted_logical_stmt: %s", extracted_logical_stmt)
             except Exception as ex:
-                print(f"Caught in extract_timer: {ex}")
+                logging.error("Caught in extract_timer: %s", str(ex), exc_info=ex, stack_info=True)
                 extracted_logical_stmt = None
         yield ProgressUpdate(f"Extracted: <tt>{extracted_logical_stmt}</tt>")
         
@@ -308,13 +311,12 @@ def process_user_response_streaming(
                         valid, original_result, negated_result =\
                             check_statement_validity(extracted_logical_stmt)
                     except Exception as ex:
-                        print(f"ex: {ex}")
-                        traceback.print_exc()
+                        logging.error("Caught in theorem prover: %s", str(ex), exc_info=ex, stack_info=True)
                         valid = "unknown"
                 print(f"valid: {valid}")
                 yield ProgressUpdate(f"Validity: {valid} original {original_result} negated {negated_result}")
         except Exception as ex:
-            print(ex)
+            logging.error("Caught: %s", str(ex), exc_info=ex, stack_info=True)
         
         # Always create timers dict and durations, regardless of success/failure
         timers = {
@@ -329,11 +331,9 @@ def process_user_response_streaming(
                         if timer is not None}
         print(f"durations {durations}")
     
-    except Exception as e:
-        print(f"ERROR in process_user_response_streaming: {e}")
-        print(f"Full traceback: {traceback.format_exc()}")
+    except Exception as ex:
+        logging.error("ERROR in process_user_response_streaming: %s", str(ex), exc_info=ex, stack_info=True)
         error_messages.append(str(e))
-    logging.info(f"&&& error_messages {error_messages}")
     yield FinalSummary(durations=durations,
                        assistant_response=assistant_response,
                        corrupted_response=corrupted_response,
