@@ -486,7 +486,7 @@ class Solver (cvc5.Solver):
             args = [self.mkReal(value)] if isinstance(value, float) else [value]
         else:
             args = []
-        logging.info(f"in mk_opt_real, args %s %s", args, [type(x) for x in args])
+        logging.info("in mk_opt_real, args %s %s", args, [type(x) for x in args])
         return self.mkTerm(Kind.APPLY_CONSTRUCTOR,
                            self.opt_real.getConstructor(which).getTerm(),
                            *args)
@@ -534,19 +534,19 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        logging.debug(f"sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
+        logging.debug("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
-        logging.debug(f"all_functions: %s", self.all_functions)
+        logging.debug("all_functions: %s", self.all_functions)
         funcs_hash = {f.name: f for f in self.all_functions}
-        logging.debug(f"funcs_hash: %s", funcs_hash)
+        logging.debug("funcs_hash: %s", funcs_hash)
         if not isinstance(sexpr, list) and sexpr == "unknown":
             rv = self.mk_opt_real_unknown()
         elif isinstance(sexpr, list) and len(sexpr) == 2 and sexpr[0] == "known":
             value = self.sexpr_to_term(sexpr[1], variables)
             if isinstance(value, int):
                 value = float(value)
-            logging.debug(f"making known term %s %s", value, type(value))
+            logging.debug("making known term %s %s", value, type(value))
             rv = self.mk_opt_real_known(value)
         elif not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
             func_term = funcs_hash[sexpr].cvc5_const
@@ -869,7 +869,7 @@ def create_solver_and_check_sat(test_statement_str: str) -> Optional[bool]:
     s.all_functions = None
     s.all_vars = None
     s.all_terms = None
-    print(f"Cleared out all_functions, vars, and terms")
+    print("Cleared out all_functions, vars, and terms")
     return result
 
 def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result]:
@@ -1012,7 +1012,7 @@ def test_diagnosis():
 
 def test_sexpr_str_to_term():
     s = Solver()
-    facts = s.generate_facts()
+    _facts = s.generate_facts() # as a side-effect, generate Functions
     for sexpr_str, expected in [("""(and
         (= (heart-rate 13180) (known 60.0))
         (forall ((t Int)) (=> (> t 13180)

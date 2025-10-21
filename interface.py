@@ -5,13 +5,11 @@ This should make it easier to support multiple front ends.
 
 import datetime, logging
 from textwrap import dedent
-from random import choice
-import traceback
 import dataclasses
 from typing import List, Dict, Optional, Iterator
 import rich
 
-from cvc5 import Term, Result
+from cvc5 import Result
 from strands import Agent, tool
 
 from utils import Timer, extract_result, newline
