@@ -1,3 +1,6 @@
+
+[![pipeline status](https://gitlab.aws.dev/simongh/a-clinical-chatbot-with-logically-verified-responses/badges/main/pipeline.svg)](https://gitlab.aws.dev/simongh/a-clinical-chatbot-with-logically-verified-responses/-/commits/main)
+
 # A clinical chatbot with logically-verified responses
 
 ## Motivation
