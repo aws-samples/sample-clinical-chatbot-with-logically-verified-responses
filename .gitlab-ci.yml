@@ -1,0 +1,12 @@
+    stages:
+      - test
+
+    doctest_job:
+      stage: test
+      image: python:3.11
+      before_script:
+        - pip install -U pip
+        - pip install -r requirements.txt
+      script:
+        - find . -name "*.py" -exec python -m doctest -v {} +
+      allow_failure: false
