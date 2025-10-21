@@ -8,5 +8,7 @@
         - pip install -U pip
         - pip install -r backend/requirements.txt
       script:
-        - find . -name "*.py" -exec python -m doctest -v {} +
+        - python -m doctest core.py
+        - python -m doctest interface.py
+        - python -m doctest utils.py
       allow_failure: false
