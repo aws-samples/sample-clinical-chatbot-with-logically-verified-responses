@@ -506,6 +506,7 @@ class Solver (cvc5.Solver):
     def sexpr_str_to_term(self, sexpr_str: str) -> Term:
         """
         >>> s = Solver()
+        >>> _facts = s.generate_facts()
         >>> s.sexpr_str_to_term("42")
         42
 
@@ -513,10 +514,10 @@ class Solver (cvc5.Solver):
         (= 42 43)
 
         >>> s.sexpr_str_to_term("(and " +
-        ...                     "(= (heart-rate 13180) 60.0) " +
+        ...                     "(= (heart-rate 13180) (known 60.0)) " +
         ...                     "(forall ((t Int)) (=> (> t 13180) " +
-        ...                     "(not (exists ((hr Real)) (= (heart-rate t) hr))))))")
-        42
+        ...                     "(not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))")
+        (and (= (heart-rate 13180) (known 60.0)) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))
         """
         # print(f"sexpr_str_to_term {sexpr_str}")
         sexpr = parse_sexpr_from_str(sexpr_str)
@@ -533,19 +534,19 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        logging.info(f"sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
+        logging.debug(f"sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
-        logging.info(f"all_functions: %s", self.all_functions)
+        logging.debug(f"all_functions: %s", self.all_functions)
         funcs_hash = {f.name: f for f in self.all_functions}
-        logging.info(f"funcs_hash: %s", funcs_hash)
+        logging.debug(f"funcs_hash: %s", funcs_hash)
         if not isinstance(sexpr, list) and sexpr == "unknown":
             rv = self.mk_opt_real_unknown()
         elif isinstance(sexpr, list) and len(sexpr) == 2 and sexpr[0] == "known":
             value = self.sexpr_to_term(sexpr[1], variables)
             if isinstance(value, int):
                 value = float(value)
-            logging.info(f"making known term %s %s", value, type(value))
+            logging.debug(f"making known term %s %s", value, type(value))
             rv = self.mk_opt_real_known(value)
         elif not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
             func_term = funcs_hash[sexpr].cvc5_const
@@ -566,28 +567,28 @@ class Solver (cvc5.Solver):
                         raise Exception(f"port me {name} {type_str}")
                     return self.mkVar(sort, name)
                 new_variables = [mk_var(*var) for var in sexpr[1]]
-                print(f"new_variables {new_variables} types {[type(v) for v in new_variables]}")
+                logging.debug("new_variables %s types %s", new_variables, [type(v) for v in new_variables])
                 body = self.sexpr_to_term(sexpr[2], variables + new_variables)
                 rv = self.mkTerm(kind, self.mkTerm(Kind.VARIABLE_LIST, *new_variables),
                                  body)
             else:
                 children = [self.sexpr_to_term(c, variables) for c in sexpr[1:]]
-                print(f"children: {children} {[type(c) for c in children]}")
-                print(f"child kinds {[c.getKind() for c in children]}")
-                print(f"kind: {kind}")
+                logging.debug("children: %s %s", children, [type(c) for c in children])
+                logging.debug("child kinds %s", [c.getKind() for c in children])
+                logging.debug("kind: %s", kind)
                 if kind == Kind.EQUAL:
                     # make sure that Reals are Reals and Ints are Ints
                     if (children[0].getKind() == Kind.CONST_INTEGER and  # arg0 is literal int
                         children[0].getSort() == self.getIntegerSort() and
                         children[1].getKind() == Kind.CONSTANT and       # arg1 is (0-arity) function
                         children[1].getSort() == self.getRealSort()):
-                       print(f"coercing integer constant to real for {children[1]}")
+                       logging.debug("coercing integer constant to real for %s", children[1])
                        children[0] = self.mkReal(float(children[0].getIntegerValue()))
                     if (children[0].getKind() == Kind.CONSTANT and       # arg0 is (0-arity) function
                         children[0].getSort() == self.getRealSort() and 
                         children[1].getKind() == Kind.CONST_INTEGER and # arg1 is literal int
                         children[1].getSort() == self.getIntegerSort()): 
-                       print(f"coercing integer constant to real for {children[0]}")
+                       logging.debug("coercing integer constant to real for %s", children[0])
                        children[1] = self.mkReal(float(children[1].getIntegerValue()))
                 rv = self.mkTerm(kind, *children)
         else:
@@ -596,14 +597,14 @@ class Solver (cvc5.Solver):
             except Exception as ex:
                 print(ex)
                 raise Exception(f"Couldn't understand <{sexpr}>") from ex
-        print(f"sexpr_to_term {sexpr} -> {rv} {rv.getKind()}")
+        logging.debug("sexpr_to_term %s -> %s (%s)", sexpr, rv, rv.getKind())
         return rv
 
 
     def convert_literal_to_term(self, *args, **kwargs) -> Term:
-        print(f"convert_literal_to_term {args[0]}")
+        logging.debug("convert_literal_to_term %s", args[0])
         rv = self._convert_literal_to_term(*args, **kwargs)
-        print(f"convert_literal_to_term {args[0]} -> {rv} ({type(rv)})")
+        logging.debug("convert_literal_to_term %s -> %s (%s)", args[0], rv, type(rv))
         return rv
 
     def _convert_literal_to_term(self, x,
@@ -627,10 +628,7 @@ class Solver (cvc5.Solver):
         if isinstance(x, str) and x == "false":
             return self.mkBoolean(False)
         for variable in reversed(variables):
-            print(f"checking against {str(variable)} {type(variable)}")
-            print(f"symbol: {variable.getSymbol()}")
             if variable.getSymbol() == str(x):
-                print("found it!")
                 return variable
         for function in self.all_functions:
             if function.name == str(x) and len(function.args) == 1:
@@ -973,9 +971,9 @@ def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
 # diagnosis_date2 is False
 # delta is midway between them
 delta = int(abs(diagnosis_date2 - diagnosis_date1)/2)
-print(f"diagnosis_date1 {diagnosis_date1}")
-print(f"diagnosis_date2 {diagnosis_date2}")
-print(f"delta {delta}")
+logging.debug("diagnosis_date1 %s", diagnosis_date1)
+logging.debug("diagnosis_date2 %s", diagnosis_date2)
+logging.debug("delta %s", delta)
 
 def test_diagnosis():
     """
@@ -1011,13 +1009,14 @@ def test_diagnosis():
         print(f"#{idx:,}: valid: {valid}")
         assert valid == expected_validity, (date_, value, expected_validity)
 
+
 def test_sexpr_str_to_term():
     s = Solver()
     facts = s.generate_facts()
     for sexpr_str, expected in [("""(and
-        (= (heart-rate 13180) 60.0)
+        (= (heart-rate 13180) (known 60.0))
         (forall ((t Int)) (=> (> t 13180)
-                              (not (exists ((hr Real)) (= (heart-rate t) hr))))))""", None),
+                              (not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))""", None),
                       ("(= age 72)", "(= age 72.0)")]:
         term = s.sexpr_str_to_term(sexpr_str)
         print(f"term: {term}")
@@ -1036,7 +1035,13 @@ def test_solver_segfault():
 
 if __name__ == "__main__":
     # test_sexpr_str_to_term()
-    test_solver_segfault()
-    test_solver_segfault()
+    # test_solver_segfault()
+    # test_solver_segfault()
+    with solver() as s:
+        _ = s.generate_facts()
+        print(s.sexpr_str_to_term("(and " +
+                            "(= (heart-rate 13180) (known 60.0)) " +
+                            "(forall ((t Int)) (=> (> t 13180) " +
+                            "(not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))"))
     print("Finished")
  
