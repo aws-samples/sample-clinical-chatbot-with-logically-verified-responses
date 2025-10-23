@@ -2,7 +2,7 @@
 The chainlit app.
 """
 
-from utils import newline
+from utils import NEWLINE
 from interface import process_user_response, get_facts_nat_lang
 from textwrap import dedent
 
@@ -12,7 +12,7 @@ import chainlit as cl
 @cl.on_chat_start
 async def start():
     elements = [
-        cl.Text(name="This patient's health records", content=newline.join(get_facts_nat_lang()), display="inline")
+        cl.Text(name="This patient's health records", content=NEWLINE.join(get_facts_nat_lang()), display="inline")
     ]
     await cl.Message(content="",
                      elements=elements).send()

@@ -5,32 +5,45 @@ those into a theory (a set of WFFs)
 
 from typing import List, Tuple, Union, Optional, Dict
 from contextlib import contextmanager
+from textwrap import dedent
 from multiprocessing import Process, Queue
 import datetime, os, logging
 
-from cvc5 import Sort, Term, Kind, Result
+from cvc5 import Sort, Term, Kind, Result, RoundingMode
 import cvc5
 
 from utils import (pprint_term, convert_date_to_epochal,
                    convert_epochal_to_str, join_fancy,
-                   parse_sexpr_from_str, newline)
+                   parse_sexpr_from_str, NEWLINE,
+                   double_to_fp64, normalize_ws, dump_term)
 
-logging.getLogger("core").setLevel(logging.INFO)
+logger = logging.getLogger("core")
+logger.setLevel(logging.INFO)
+# logger.getLogger("core").setLevel(logger.INFO)
 logging.basicConfig(
     format="%(levelname)s | %(name)s | %(message)s",
     handlers=[logging.StreamHandler()],
-    level=logging.INFO)
+    level=logging.DEBUG)
 
 diagnosis_date1: int = convert_date_to_epochal("2006-02-01")
 diagnosis_date2: int = convert_date_to_epochal("2006-03-01")
 diagnosis_date3: int = convert_date_to_epochal("2006-04-01")
 
 SUPPORTED_KINDS = {
+    "fp=": Kind.FLOATINGPOINT_EQ,
     "=": Kind.EQUAL,
-    "equal": Kind.EQUAL,
     "and": Kind.AND,
     "or": Kind.OR,
     "not": Kind.NOT,
+
+    "fp/": Kind.FLOATINGPOINT_DIV,
+    "fp+": Kind.FLOATINGPOINT_ADD,
+    "fp-": Kind.FLOATINGPOINT_SUB,
+    "fp<": Kind.FLOATINGPOINT_LT,
+    "fp<=": Kind.FLOATINGPOINT_LEQ,
+    "fp>": Kind.FLOATINGPOINT_GT,
+    "fp>=": Kind.FLOATINGPOINT_GEQ,
+
     "/": Kind.DIVISION,
     "+": Kind.ADD,
     "-": Kind.SUB,
@@ -38,12 +51,12 @@ SUPPORTED_KINDS = {
     "<=": Kind.LEQ,
     ">": Kind.GT,
     ">=": Kind.GEQ,
+    
     "forall": Kind.FORALL,
     "exists": Kind.EXISTS,
     "=>": Kind.IMPLIES,
     "implies": Kind.IMPLIES,
-    "->": Kind.IMPLIES
-}
+    "->": Kind.IMPLIES}
 
 
 class Function:
@@ -86,16 +99,7 @@ class Function:
         s = self.solver
         pprint_name = self.name.replace("_", " ").replace("-", " ")
         def add_units(value, units: Tuple[str, str]):
-            print(f"add_units {value} {type(value)}")
-            if isinstance(value, Term) and value.getSort() == s.opt_real_sort:
-                tm = s.mkTerm(Kind.APPLY_SELECTOR,
-                              s.opt_real_sort.getDatatype()["known"].getSelector("value").getTerm(),
-                              value)
-                print(f"tm {tm}")
-                tm = s.simplify(tm)
-                print(f"tm {tm}")
-                value = tm
-                print(f"value now {value} {type(value)}")
+            # print(f"add_units {value} {type(value)}")
             if units:
                 if isinstance(value, (int, float)) :
                     return f"{value} {units[0]}" if value == 1 \
@@ -157,7 +161,13 @@ class Function:
                     axiom = s.not_(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
                                            else self.cvc5_const)
             else:
-                axiom = s.equal(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
+                logger.info("args {self.args}")
+                logger.info("arg_value_terms %s", arg_value_terms)
+                logger.info("results_term %s", results_term)
+                logger.info("results_term sort %s", results_term.getSort())
+                eq_predicate = s.equal_fp if results_term.getSort() == s.fp64_sort\
+                               else s.equal 
+                axiom = eq_predicate(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
                                             else self.cvc5_const,
                                     results_term)
             results.append(axiom)
@@ -175,22 +185,22 @@ class Function:
         """
         if self.name in {"D"}:
             return [] # these are handled in InterpolatedFunction
-        print(f"generate_CWA_axioms_for_others {self.name}")
+        logger.info("generate_CWA_axioms_for_others %s", self.name)
         s = self.solver
         relevant_facts = [fact for fact in facts if self == fact.function]
-        print(f"relevant facts: {relevant_facts}")
+        logger.info("relevant facts: %s", relevant_facts)
         results = []
-        print(f"self.args {self.args}")
+        logger.info("self.args %s", self.args)
         if len(self.args) > 0: # otherwise it's a constant, no need for CWA
             formal_args = [s.mkVar(arg_sort, arg_name)
                            for arg_name, arg_sort in self.args]
-            print(f"formal_args {formal_args}")
-            if self.return_sort == s.opt_real_sort:
-                undefined = s.mk_opt_real_unknown()
-            elif self.return_sort == s.tfu_sort:
-                undefined = s.mk_tfu_true_or_false()
-            else:
-                raise Exception(f"port me: {self.return_sort}")
+            logger.info("formal_args %s", formal_args)
+            # if self.return_sort == self.solver.fp64_sort:
+            #     undefined = s.mkNaN()
+            # elif self.return_sort == s.tfu_sort:
+            #     undefined = s.mk_tfu_true_or_false()
+            # else:
+            #     raise Exception(f"port me: {self.return_sort}")
             # undefined = s.undefined_real if self.return_sort == s.getRealSort() else \
             #                 s.undefined_str if self.return_sort == s.getStringSort() else \
             #                    None # this signals an error
@@ -214,10 +224,11 @@ class Function:
             axiom = s.forall(formal_args,
                         s.equal(
                             not_defined,
-                            s.equal(s.apply(self, formal_args),
-                                    undefined)))
+                            s.equal_fp(s.apply(self, formal_args),
+                                    s.mkNaN())))
             results.append(axiom)
-        print(f"CWA axioms for {self.name}:\n{newline.join(map(str,results))}")
+        logger.info("CWA axioms for %s:", self.name)
+        logger.info("%s", NEWLINE.join(map(str,results)))
         return results
 
 
@@ -247,11 +258,7 @@ class InterpolatableFunction (Function):
 
         The function must have one argument with name "time".
         """
-        print(f"IF::generate_CWA_axioms {self}")
-        # if self.name == "PR":
-        #     return self.generate_CWA_axioms_for_pr(facts)
-        # if self.name == "PR_MR":
-        #     return self.generate_CWA_axioms_for_pr_mr(facts)
+        logger.info(f"IF::generate_CWA_axioms {self}")
         if self.name == "D":
             return self.generate_CWA_axioms_for_diagnosis(facts)
         else:
@@ -262,16 +269,16 @@ class InterpolatableFunction (Function):
         """
         function is of type Function, facts is List[Fact]
         """
-        print(f"IF::generate_CWA_axioms_for_diagnosis {self}")
+        logger.info("IF::generate_CWA_axioms_for_diagnosis %s", self)
         assert self.name == "D"
         s = self.solver
         relevant_facts = [fact for fact in facts if self == fact.function]
-        observed_ICDs = {fact.args[0] for fact in relevant_facts}
-        print(f"observed ICDs: {observed_ICDs}")
+        observed_icds = {fact.args[0] for fact in relevant_facts}
+        logger.info("observed ICDs: %s", observed_icds)
         results = []
         formal_args = [s.mkVar(arg_sort, arg_name)
                         for arg_name, arg_sort in self.args]
-        print(f"formal args {formal_args}")
+        logger.info("formal args %s", formal_args)
         # formal_args is ICD, time
         ICD = s.mkVar(s.getStringSort(), "ICD")
         # t0 = s.mkVar(s.getIntegerSort(), "t0")
@@ -280,23 +287,15 @@ class InterpolatableFunction (Function):
         tfu_t = s.mk_tfu_true()
         tfu_f = s.mk_tfu_false()
 
-        # def convert_formal_arg(arg):
-        #     """ Need a Var, not a Const """
-        #     if str(arg) == "time":
-        #         return time
-        #     elif str(arg) == "ICD":
-        #         return ICD
-        #     else:
-        #         raise Exception(f"port me: {arg}")
-
-        for observed_ICD in observed_ICDs:
+        for observed_ICD in observed_icds:
             these_facts = [fact for fact in relevant_facts if fact.args[0] == observed_ICD]
-            print(f"Found {len(these_facts):} relevant facts for {observed_ICD}")
+            logger.info("Found %s relevant facts for %s",
+                        len(these_facts), observed_ICD)
             these_times = {fact.args[1] for fact in these_facts}
-            print(f"These times: {these_times}")
+            logger.info("These times: %s", these_times)
             min_time, max_time = min(these_times), max(these_times)
             ordered_times = sorted(list(these_times))
-            print(f"Ordered times: {ordered_times}")
+            logger.info("Ordered times: %s", ordered_times)
             time2fact = {f.args[1]: f for f in these_facts}
             # each of these is a collection of ranges or 2-tuples,
             # the first element is inclusive, the second is exclusive
@@ -304,7 +303,7 @@ class InterpolatableFunction (Function):
             false_disjuncts = []
             for i in range(1, len(ordered_times)):
                 time1, time2 = ordered_times[i-1], ordered_times[i]
-                print(f"time1 {time1} time2 {time2}")
+                logger.info("time1 %s time2 %s", time1, time2)
                 if time2fact[time1].result == tfu_t:
                     true_disjuncts.append((time1, time2))
                 elif time2fact[time1].result == tfu_f:
@@ -315,8 +314,8 @@ class InterpolatableFunction (Function):
             most_recent_diagnosis = last_fact.result
             (true_disjuncts if most_recent_diagnosis == tfu_t else false_disjuncts)\
                 .append((max_time, None))
-            print(f"false disjuncts: {false_disjuncts}")
-            print(f"true disjuncts: {true_disjuncts}")
+            logger.info("false disjuncts: %s", false_disjuncts)
+            logger.info("true disjuncts: %s", true_disjuncts)
 
             def range2disjunct(start: int, stop: int) -> Term:
                 if stop is not None:
@@ -326,11 +325,13 @@ class InterpolatableFunction (Function):
                     return s.geq(time, s.mkInteger(start))
 
             false_disjuncts_terms = [range2disjunct(*range) for range in false_disjuncts]
+            logger.info("false disjuncts terms: %s", false_disjuncts_terms)
             true_disjuncts_terms = [range2disjunct(*range) for range in true_disjuncts]
-            print(f"false disjuncts terms: {false_disjuncts_terms}")
-            print(f"true disjuncts terms: {true_disjuncts_terms}")
+            logger.info("true disjuncts terms: %s", true_disjuncts_terms)
 
-            print(f"most recent diagnosis {most_recent_diagnosis} {type(most_recent_diagnosis)}")
+            logger.info("most recent diagnosis %s %s",
+                        most_recent_diagnosis,
+                        type(most_recent_diagnosis))
 
             trigger = s.mkTerm(Kind.INST_PATTERN, s.apply(self, [ICD, time]))
 
@@ -352,7 +353,6 @@ class InterpolatableFunction (Function):
                         s.equal(s.apply(self, [ICD, time]),
                                 tfu_f)))
             results.append(axiom)
-
         return results
 
 class Fact:
@@ -389,7 +389,7 @@ class Solver (cvc5.Solver):
         self.setOption("produce-difficulty", "true")
         self.setOption("produce-unsat-cores", "true")
         self.setOption("minimal-unsat-cores", "true")
-        self.setOption("print-cores-full", "true")
+        # self.setOption("print-cores-full", "true")
         self.setOption("output", "trigger")
         self.setOption("output", "inst")
         self.setOption("output", "inst-strategy")
@@ -424,15 +424,17 @@ class Solver (cvc5.Solver):
         #
         # optReal = Either a Real or unknown
         #
-        self.opt_real_decl = self.mkDatatypeDecl("optReal")
-        known_ctor = self.mkDatatypeConstructorDecl("known")
-        known_ctor.addSelector("value", self.getRealSort())
-        self.opt_real_decl.addConstructor(known_ctor)
-        unknown_ctor = self.mkDatatypeConstructorDecl("unknown")
-        self.opt_real_decl.addConstructor(unknown_ctor)
+        # self.opt_real_decl = self.mkDatatypeDecl("optReal")
+        # known_ctor = self.mkDatatypeConstructorDecl("known")
+        # known_ctor.addSelector("value", self.getRealSort())
+        # self.opt_real_decl.addConstructor(known_ctor)
+        # unknown_ctor = self.mkDatatypeConstructorDecl("unknown")
+        # self.opt_real_decl.addConstructor(unknown_ctor)
         
-        self.opt_real_sort = self.mkDatatypeSort(self.opt_real_decl)
-        self.opt_real = self.opt_real_sort.getDatatype()
+        # self.opt_real_sort = self.mkDatatypeSort(self.opt_real_decl)
+        # self.opt_real = self.opt_real_sort.getDatatype()
+        self.fp64_sort = self.mkFloatingPointSort(11, 53)
+        self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_NEAREST_TIES_TO_EVEN)
 
     def __del__(self):
         print(f"Destroying {self}")
@@ -442,6 +444,15 @@ class Solver (cvc5.Solver):
 
     def add_function(self, f: Function):
         self.all_functions.append(f)
+
+    def mkNaN(self) -> Term:
+        rv = self.mkFloatingPointNaN(exp=11, sig=53)
+        assert rv.isFloatingPointNaN()
+        logger.info("This is a NaN: %s", rv)
+        return rv
+
+    def mkFp64(self, num: float) -> Term:
+        return double_to_fp64(self, num)
 
     def mkTerm(self, *args, **kwargs) -> Term:
         self.all_terms.append(result := super().mkTerm(*args, **kwargs))
@@ -480,22 +491,24 @@ class Solver (cvc5.Solver):
     def mk_tfu_false(self) -> Term:         return self.mk_tfu("false")
     def mk_tfu_true_or_false(self) -> Term: return self.mk_tfu("true_or_false")
 
-    def mk_opt_real(self, which: str,
-                    value: Optional[Union[float, Term]]= None) -> Term:
-        if which == "known":
-            args = [self.mkReal(value)] if isinstance(value, float) else [value]
-        else:
-            args = []
-        logging.info("in mk_opt_real, args %s %s", args, [type(x) for x in args])
-        return self.mkTerm(Kind.APPLY_CONSTRUCTOR,
-                           self.opt_real.getConstructor(which).getTerm(),
-                           *args)
+    # def mk_opt_real(self, which: str,
+    #                 value: Optional[Union[float, Term]]= None) -> Term:
+    #     if which == "known":
+    #         args = [self.mkReal(value)] if isinstance(value, float) else [value]
+    #     else:
+    #         args = []
+    #     logger.info("in mk_opt_real, args %s %s", args, [type(x) for x in args])
+    #     rv = self.mkTerm(Kind.APPLY_CONSTRUCTOR,
+    #                      self.opt_real.getConstructor(which).getTerm(),
+    #                      *args)
+    #     logger.info("mk_opt_real -> %s", rv)
+    #     return rv
 
-    def mk_opt_real_known(self, x: float) -> Term:
-        return self.mk_opt_real("known", x)
+    # def mk_opt_real_known(self, x: float) -> Term:
+    #     return self.mk_opt_real("known", x)
 
-    def mk_opt_real_unknown(self) -> Term:
-        return self.mk_opt_real("unknown")
+    # def mk_opt_real_unknown(self) -> Term:
+    #     return self.mk_opt_real("unknown")
 
     def find_by_name(self, func_name: str) -> Function:
         for func in self.all_functions:
@@ -513,14 +526,16 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_str_to_term("(= 42 43)")
         (= 42 43)
 
-        >>> s.sexpr_str_to_term("(and " +
-        ...                     "(= (heart-rate 13180) (known 60.0)) " +
+        >>> t = s.sexpr_str_to_term("(and " +
+        ...                     "(= (heart-rate 13180) 60.0) " +
         ...                     "(forall ((t Int)) (=> (> t 13180) " +
-        ...                     "(not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))")
-        (and (= (heart-rate 13180) (known 60.0)) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))
+        ...                     "(not (exists ((hr FP)) (= (heart-rate t) hr))))))")
+        >>> print(normalize_ws(pprint_term(t)))
+        (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
         """
         # print(f"sexpr_str_to_term {sexpr_str}")
         sexpr = parse_sexpr_from_str(sexpr_str)
+        print(f"sexpr {sexpr}")
         return self.sexpr_to_term(sexpr)
 
     def sexpr_to_term(self, sexpr, variables: List[Term] = None) -> Term:
@@ -534,21 +549,13 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        logging.debug("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
+        # logger.info("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
-        logging.debug("all_functions: %s", self.all_functions)
+        # logger.debug("all_functions: %s", self.all_functions)
         funcs_hash = {f.name: f for f in self.all_functions}
-        logging.debug("funcs_hash: %s", funcs_hash)
-        if not isinstance(sexpr, list) and sexpr == "unknown":
-            rv = self.mk_opt_real_unknown()
-        elif isinstance(sexpr, list) and len(sexpr) == 2 and sexpr[0] == "known":
-            value = self.sexpr_to_term(sexpr[1], variables)
-            if isinstance(value, int):
-                value = float(value)
-            logging.debug("making known term %s %s", value, type(value))
-            rv = self.mk_opt_real_known(value)
-        elif not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
+        # logger.debug("funcs_hash: %s", funcs_hash)
+        if not isinstance(sexpr, list) and sexpr in funcs_hash: # is a constant, a 0-arity function
             func_term = funcs_hash[sexpr].cvc5_const
             rv = func_term
         elif isinstance(sexpr, list) and sexpr[0] in funcs_hash:
@@ -561,35 +568,38 @@ class Solver (cvc5.Solver):
                 def mk_var(name: str, type_str: str) -> Term:
                     if type_str == "Int":
                         sort = self.getIntegerSort()
-                    elif type_str == "Real":
-                        sort = self.getRealSort()
+                    elif type_str == "FP":
+                        sort = self.fp64_sort
                     else:
                         raise Exception(f"port me {name} {type_str}")
                     return self.mkVar(sort, name)
                 new_variables = [mk_var(*var) for var in sexpr[1]]
-                logging.debug("new_variables %s types %s", new_variables, [type(v) for v in new_variables])
+                # logger.debug("new_variables %s types %s", new_variables, [type(v) for v in new_variables])
                 body = self.sexpr_to_term(sexpr[2], variables + new_variables)
                 rv = self.mkTerm(kind, self.mkTerm(Kind.VARIABLE_LIST, *new_variables),
                                  body)
             else:
                 children = [self.sexpr_to_term(c, variables) for c in sexpr[1:]]
-                logging.debug("children: %s %s", children, [type(c) for c in children])
-                logging.debug("child kinds %s", [c.getKind() for c in children])
-                logging.debug("kind: %s", kind)
+                # logger.info("children: %s %s", children, [type(c) for c in children])
+                # logger.info("child kinds %s", [c.getKind() for c in children])
+                # logger.info("sorts %s", [c.getSort() for c in children])
+                # logger.info("kind: %s", kind)
                 if kind == Kind.EQUAL:
                     # make sure that Reals are Reals and Ints are Ints
                     if (children[0].getKind() == Kind.CONST_INTEGER and  # arg0 is literal int
                         children[0].getSort() == self.getIntegerSort() and
                         children[1].getKind() == Kind.CONSTANT and       # arg1 is (0-arity) function
-                        children[1].getSort() == self.getRealSort()):
-                       logging.debug("coercing integer constant to real for %s", children[1])
+                        children[1].getSort() == self.fp64_sort):
+                       logger.info("coercing integer constant to real for %s", children[1])
                        children[0] = self.mkReal(float(children[0].getIntegerValue()))
                     if (children[0].getKind() == Kind.CONSTANT and       # arg0 is (0-arity) function
-                        children[0].getSort() == self.getRealSort() and 
+                        children[0].getSort() == self.fp64_sort and 
                         children[1].getKind() == Kind.CONST_INTEGER and # arg1 is literal int
                         children[1].getSort() == self.getIntegerSort()): 
-                       logging.debug("coercing integer constant to real for %s", children[0])
+                       logger.info("coercing integer constant to real for %s", children[0])
                        children[1] = self.mkReal(float(children[1].getIntegerValue()))
+                # logger.info("children: %s %s", children, [type(c) for c in children])
+                # logger.info("sorts %s", [c.getSort() for c in children])
                 rv = self.mkTerm(kind, *children)
         else:
             try:
@@ -597,14 +607,14 @@ class Solver (cvc5.Solver):
             except Exception as ex:
                 print(ex)
                 raise Exception(f"Couldn't understand <{sexpr}>") from ex
-        logging.debug("sexpr_to_term %s -> %s (%s)", sexpr, rv, rv.getKind())
+        # logger.info("sexpr_to_term %s -> %s (%s)", sexpr, rv, rv.getKind())
         return rv
 
 
     def convert_literal_to_term(self, *args, **kwargs) -> Term:
-        logging.debug("convert_literal_to_term %s", args[0])
+        # logger.info("convert_literal_to_term %s", args[0])
         rv = self._convert_literal_to_term(*args, **kwargs)
-        logging.debug("convert_literal_to_term %s -> %s (%s)", args[0], rv, type(rv))
+        # logger.info("convert_literal_to_term %s -> %s (%s)", args[0], rv, type(rv))
         return rv
 
     def _convert_literal_to_term(self, x,
@@ -614,7 +624,9 @@ class Solver (cvc5.Solver):
         """
         variables are introduced by quantifiers and are added on the end of the list.
         """
-        # print(f"_convert_literal_to_term {x} vars {" ".join([str(v) for v in variables])}")
+        if variables is None:
+            variables = []
+        # logger.info(f"_convert_literal_to_term {x} {type(x)} vars {' '.join([str(v) for v in variables])} known_sort {known_sort}")
         if variables is None:
             variables = []
         if isinstance(x, str) and x == "tfu_true":
@@ -627,6 +639,8 @@ class Solver (cvc5.Solver):
             return self.mkBoolean(True)
         if isinstance(x, str) and x == "false":
             return self.mkBoolean(False)
+        if isinstance(x, str) and x.lower() == "nan":
+            return self.mkNaN()
         for variable in reversed(variables):
             if variable.getSymbol() == str(x):
                 return variable
@@ -636,8 +650,10 @@ class Solver (cvc5.Solver):
         if known_sort:
             if known_sort.isInteger():
                 return self.mkInteger(int(x))
-            elif known_sort.isReal():
-                return self.mkReal(float(x))
+            # elif known_sort.isReal():
+            #     return self.mkReal(float(x))
+            elif known_sort == self.fp64_sort:
+                return self.mkFp64(float(x))
             elif known_sort.isString():
                 return self.mkString(str(x))
             else:
@@ -649,7 +665,7 @@ class Solver (cvc5.Solver):
         else:
             # cvc5 is finicky about types, so preferentially cast to float
             try:
-                return self.mkReal(float(x)) if "." in str(x) else self.mkInteger(int(x))
+                return self.mkFp64(float(x)) if "." in str(x) else self.mkInteger(int(x))
             except:
                 try:
                     return self.mkString(str(x))
@@ -693,6 +709,13 @@ class Solver (cvc5.Solver):
         # print(f"equal -> {type(rv)} {rv}")
         return rv
 
+    def equal_fp(self, term1: Term, term2: Term) -> Term:
+        # print(f"equal {type(term1)} {term1} {type(term2)} {term2}")
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_EQ, term1, term2)
+        # print(f"equal -> {type(rv)} {rv}")
+        return rv
+
     def implies(self, term1: Term, term2: Term) -> Term:
         # print(f"implies {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
@@ -707,10 +730,24 @@ class Solver (cvc5.Solver):
         # print(f"lt -> {type(rv)} {rv}")
         return rv
 
+    def lt_fp(self, term1: Term, term2: Term) -> Term:
+        # print(f"lt {type(term1)} {term1} {type(term2)} {term2}")
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_LT, term1, term2)
+        # print(f"lt -> {type(rv)} {rv}")
+        return rv
+
     def geq(self, term1: Term, term2: Term) -> Term:
         # print(f"geq {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.GEQ, term1, term2)
+        # print(f"geq -> {type(rv)} {rv}")
+        return rv
+
+    def geq_fp(self, term1: Term, term2: Term) -> Term:
+        # print(f"geq {type(term1)} {term1} {type(term2)} {term2}")
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_GEQ, term1, term2)
         # print(f"geq -> {type(rv)} {rv}")
         return rv
 
@@ -780,14 +817,14 @@ class Solver (cvc5.Solver):
                                 return_sort=self.getIntegerSort(),
                                 return_units=("Unix epochal day", "Unix epochal days"))
         age_function = Function(self, "age",
-                                return_sort=self.getRealSort(),
+                                return_sort=self.fp64_sort,
                                 return_units=("year", "years"))
         heart_rate_function = Function(self, "heart-rate",
-                                return_sort=self.opt_real_sort,
+                                return_sort=self.fp64_sort,
                                 return_units=("beat/sec", "beats/sec"),
                                 args=[("time", self.getIntegerSort())])
         weight_function = Function(self, "weight",
-                                return_sort=self.opt_real_sort,
+                                return_sort=self.fp64_sort,
                                 return_units=("pound", "pounds"),
                                 args=[("time", self.getIntegerSort())])
         diagnosis_function = InterpolatableFunction(
@@ -801,10 +838,14 @@ class Solver (cvc5.Solver):
             Fact(name_function, "Joe Bloggs"),
             Fact(birth_date_function, _birth_date),
             Fact(age_function, (today - _birth_date)/365),
-            Fact(heart_rate_function, self.mk_opt_real_known(55.0), convert_date_to_epochal("2005-02-01")),
-            Fact(heart_rate_function, self.mk_opt_real_known(60.0), convert_date_to_epochal("2006-02-01")),
-            Fact(weight_function, self.mk_opt_real_known(150.0), convert_date_to_epochal("2005-02-01")),
-            Fact(weight_function, self.mk_opt_real_known(155.0), convert_date_to_epochal("2006-02-01")),
+            Fact(heart_rate_function, 55.0,
+                 convert_date_to_epochal("2005-02-01")),
+            Fact(heart_rate_function, 60.0,
+                 convert_date_to_epochal("2006-02-01")),
+            Fact(weight_function, 150.0,
+                 convert_date_to_epochal("2005-02-01")),
+            Fact(weight_function, 155.0,
+                 convert_date_to_epochal("2006-02-01")),
             Fact(diagnosis_function, self.mk_tfu_true(),
                      "E11", diagnosis_date1),
             Fact(diagnosis_function, self.mk_tfu_false(),
@@ -818,59 +859,71 @@ def solver():
     tmp_solver = Solver()
     yield tmp_solver
 
-
-def create_solver_and_check_sat(test_statement_str: str) -> Optional[bool]:
-    """
-    Note that the facts are baked into the Solver. To use a different set of
-    facts, create a subclass of Solver.
-    """
-    print(f"create_solver_and_check_sat {test_statement_str}")
-    assert test_statement_str
-    s = Solver()
-
-    facts = s.generate_facts()
-    print("\nfacts:\n====================\n" +\
-          "\n".join(f.as_natural_language() for f in facts) +\
-          "\n====================\n")
-
-    axioms = s.generate_all_axioms(facts)
-    print("all axioms:\n====================")
-    for axiom in axioms:
-        print(pprint_term(axiom, 0))
-    print("====================\n")
-
-    test_stmt = s.sexpr_str_to_term(test_statement_str)
-    print(f"Test statement:\n{pprint_term(test_stmt)})")
-
-    for stmt in axioms + [test_stmt]:
-        print(f"(assert\n  {pprint_term(stmt, indent=2)})")
-        s.assertFormula(stmt)
-    s.assertFormula(test_stmt)
-
-    print("checking sat")
-    result = s.checkSat()
-    print(f"checkSat -> {result}")
+def show_info_about_result(s: Solver, this_result: Result):
+    logger.info("checkSat -> %s", this_result)
     # print("Getting timeout core")
     # tc_result, formulas = s.getTimeoutCore()
     # print(f"timeout core:{tc_result}\nFormulas:")
     # for f in formulas:
     #     pprint_term(f)
     # print("=======================")
-    print("Getting unsat core")
-    if result.isUnsat():
+    if this_result.isUnsat():
+        logger.info("Getting unsat core")
         unsat_core = s.getUnsatCore()
-        print("\nUnsat core:")
+        logger.info("\nUnsat core:")
         for term in unsat_core:
-            print(pprint_term(term))
-        print("=======================")
-    print(f"create_solver_and_check_sat {test_statement_str} -> {result}")
+            logger.info("Unsat core> %s", pprint_term(term))
+            logger.info(dump_term(term))
+        logger.info("unsat core=======================")
+    if this_result.isSat():
+        logger.info("Getting model")
+        m = s.getModel(sorts=[], consts=[])
+        logger.info(m)
+    logger.info("Asserts according to the solver:")
+    for assertion in s.getAssertions():
+        logger.info(assertion)
+        logger.info(pprint_term(assertion))
+
+
+def create_solver_and_check_sat(test_statement_str: str) -> Optional[bool]:
+    """
+    Note that the facts are baked into the Solver. To use a different set of
+    facts, create a subclass of Solver.
+    """
+    logger.info("create_solver_and_check_sat %s", test_statement_str)
+    assert test_statement_str
+    s = Solver()
+
+    facts = s.generate_facts()
+    logger.info("facts:")
+    for f in facts:
+        logger.info(f.as_natural_language())
+    logger.info("====================")
+
+    axioms = s.generate_all_axioms(facts)
+    logger.info("all axioms:")
+    for axiom in axioms:
+        logger.info(pprint_term(axiom, 0))
+    logger.info("====================\n")
+
+    test_stmt = s.sexpr_str_to_term(test_statement_str)
+    logger.info(f"Test statement:\n{pprint_term(test_stmt)})")
+
+    for stmt in axioms + [test_stmt]:
+        logger.info("(assert %s", pprint_term(stmt, indent=2))
+        s.assertFormula(stmt)
+
+    logger.info("checking sat")
+    this_result = s.checkSat()
+    show_info_about_result(s, this_result)
+    logger.info(f"create_solver_and_check_sat {test_statement_str} -> {this_result}")
     # Python seems not to be GCing `all_functions` correctly.
     # this line prevents a SEGFAULT:
     s.all_functions = None
     s.all_vars = None
     s.all_terms = None
-    print("Cleared out all_functions, vars, and terms")
-    return result
+    logger.info("Cleared out all_functions, vars, and terms")
+    return this_result
 
 def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result]:
     """
@@ -883,11 +936,11 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
     2) the cvc5.Result object for the original query
     3) the cvc5.Result object for the negated query
     """
-    print(f"check_statement_validity {logical_stmt_str}")
+    logger.info(f"check_statement_validity {logical_stmt_str}")
     orig_result = create_solver_and_check_sat(logical_stmt_str)
-    print(f"orig_result: {orig_result}")
+    logger.info(f"orig_result: {orig_result}")
     negated_result = create_solver_and_check_sat(f"(not {logical_stmt_str})")
-    print(f"orig_result: {orig_result} negated_result: {negated_result}")
+    logger.info(f"orig_result: {orig_result} negated_result: {negated_result}")
     if negated_result.isUnsat():
         # we trust an unsat result more than a sat result
         rv = "true"
@@ -899,16 +952,16 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
         rv = "false"
     else:
         rv = "unknown"
-    print(f"check_statement_validity {logical_stmt_str} -> {rv}")
+    logger.info(f"check_statement_validity {logical_stmt_str} -> {rv}")
     return rv, orig_result, negated_result
 
 def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
-    print(f"check_{which}_stmt {logical_stmt_str}, pid {os.getpid()}: ")
+    logger.info(f"check_{which}_stmt {logical_stmt_str}, pid {os.getpid()}: ")
     try:
         result = create_solver_and_check_sat(logical_stmt_str)
-        print(f"{which}>result: {result}")
+        logger.info(f"{which}>result: {result}")
         queue.put((os.getpid(), which, str(result).lower())) # result isn't pickleable
-        print("added to q")
+        logger.info("added to q")
     except Exception as ex:
         queue.put((os.getpid(), f"Error in {which} child: {ex}"))
 
@@ -971,9 +1024,9 @@ def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
 # diagnosis_date2 is False
 # delta is midway between them
 delta = int(abs(diagnosis_date2 - diagnosis_date1)/2)
-logging.debug("diagnosis_date1 %s", diagnosis_date1)
-logging.debug("diagnosis_date2 %s", diagnosis_date2)
-logging.debug("delta %s", delta)
+logger.debug("diagnosis_date1 %s", diagnosis_date1)
+logger.debug("diagnosis_date2 %s", diagnosis_date2)
+logger.debug("delta %s", delta)
 
 def test_diagnosis():
     """
@@ -1013,35 +1066,118 @@ def test_diagnosis():
 def test_sexpr_str_to_term():
     s = Solver()
     _facts = s.generate_facts() # as a side-effect, generate Functions
-    for sexpr_str, expected in [("""(and
-        (= (heart-rate 13180) (known 60.0))
-        (forall ((t Int)) (=> (> t 13180)
-                              (not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))""", None),
-                      ("(= age 72)", "(= age 72.0)")]:
+    for sexpr_str, expected in [(dedent("""\
+        (and
+            (= (heart-rate 13180) 60.0)
+            (forall ((t Int))
+                (=> (> t 13180)
+                    (not (exists ((hr FP))
+                            (and (not (= hr NaN))
+                                 (= (heart-rate t) hr))
+                         )))))"""), None),
+        ("(= age 72)", "(= age 72.0)")]:
         term = s.sexpr_str_to_term(sexpr_str)
         print(f"term: {term}")
-        sexpr_str = sexpr_str.replace("\n", " ").replace("    ", " ").replace("  ", " ").replace("  ", " ").replace("  ", " ").replace("  ", " ")
+        term_str = normalize_ws(pprint_term(term))
+        sexpr_str = normalize_ws(sexpr_str)
         expected = expected or sexpr_str
-        print(f"Got:      {str(term)}")
+        print(f"Got:      {term_str}")
         print(f"Expected: {expected}")
-        assert str(term) == expected, term
+        assert str(term_str) == expected
 
     s.all_functions = None
     s.all_terms = None
 
+
 def test_solver_segfault():
+    """ Call this multiple times to see if we can get a SEGFAULT. """
     result = check_statement_validity("(> age 40.0)")
     print(result)
 
+
 if __name__ == "__main__":
-    # test_sexpr_str_to_term()
+    # valid = check_statement_validity("(= age 75.8547945)")
+    # valid = check_statement_validity("(= age 75.8547945)")
+    # valid = check_statement_validity("(exists ((time Int)) (> (heart-rate time) 100.0))")
+
+    # valid = create_solver_and_check_sat("(exists ((time Int)) (and (not (= (heart-rate time) NaN)) (> (heart-rate time) 100.0)))")
+    # assert valid.isUnsat(), valid
+
+
+    valid = create_solver_and_check_sat("(exists ((time Int)) (> (heart-rate time) 100.0))")
+    assert valid.isUnsat(), valid
+
+    valid = create_solver_and_check_sat("(not (exists ((time Int)) (< (heart-rate time) 100.0)))")
+    assert valid.isUnsat(), valid
+
+    valid = create_solver_and_check_sat("(not (exists ((time Int)) (> (heart-rate time) 10.0)))")
+    assert valid.isUnsat(), valid
+
+    valid = create_solver_and_check_sat("(exists ((time Int)) (< (heart-rate time) 10.0))")
+    assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 100.0)")
+    # assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(> (heart-rate 12816) 100.0)")
+    # assert valid.isUnsat(), valid
+
+    # valid = check_statement_validity("(> 150.0 100.0)")
+
+    # valid = create_solver_and_check_sat("(< (heart-rate 12815) 100.0)") # Sat
+    # assert valid.isSat(), valid
+    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 100.0)") # Unsat
+    # assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(< (heart-rate 12815) 10.0)") # Unsat
+    # assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 10.0)") # Sat
+    # assert valid.isSat(), valid
+
+    # with solver() as s:
+    #     X = s.mkConst(s.fp64_sort, "X")
+    #     s.assertFormula(s.equal(X, double_to_fp64(s, 42.0)))
+    #     s.assertFormula(s.lt(X, double_to_fp64(s, 10.0)))
+    #     # for sexpr in ["(= X 42.0)", "(> X 50.0)"]:
+    #     #     term = s.sexpr_str_to_term(sexpr)
+    #     #     print(f"term {pprint_term(term)}")
+    #     #     s.assertFormula(term)
+    #     result = s.checkSat()
+    #     print(f"result: {result}")
+
+    # with solver() as s:
+    #     X = s.mkConst(s.fp64_sort, "X")
+    #     hr_sort = s.mkFunctionSort([s.getIntegerSort()], s.fp64_sort)
+    #     hr = s.mkConst(hr_sort, "hr")
+    #     s.assertFormula(s.equal(s.apply(hr, [s.mkInteger(10)]),
+    #                             double_to_fp64(s, 42.0)))
+    #     s.assertFormula(s.lt(s.apply(hr, [s.mkInteger(10)]),
+    #                          double_to_fp64(s, 10.0)))
+    #     # for sexpr in ["(= X 42.0)", "(> X 50.0)"]:
+    #     #     term = s.sexpr_str_to_term(sexpr)
+    #     #     print(f"term {pprint_term(term)}")
+    #     #     s.assertFormula(term)
+    #     result = s.checkSat()
+    #     print(f"result: {result}")    # test_sexpr_str_to_term()
+    #     show_info_about_result(s, result)
+
     # test_solver_segfault()
     # test_solver_segfault()
-    with solver() as s:
-        _ = s.generate_facts()
-        print(s.sexpr_str_to_term("(and " +
-                            "(= (heart-rate 13180) (known 60.0)) " +
-                            "(forall ((t Int)) (=> (> t 13180) " +
-                            "(not (exists ((hr Real)) (= (heart-rate t) (known hr)))))))"))
+    # with solver() as s:
+    #     _ = s.generate_facts()
+    #     sexpr = dedent("""\
+    #         (and
+    #             (= (heart-rate 13180) 60.0)
+    #             (forall ((t Int))
+    #                 (=> (> t 13180)
+    #                     (not (exists ((hr FP))
+    #                             (and (= (heart-rate t) hr)
+    #                                  (not (= hr NaN)))
+    #                           ))
+    #                 )))""")
+    #     # sexpr = "(= (heart-rate 13180) 60.0)"
+    #     # sexpr = "(= (heart-rate 13180) NaN)"
+    #     t = s.sexpr_str_to_term(sexpr)
+    #     print(f"term: {t}")
+    #     print(f"pprint: {pprint_term(t, indent=8)}")
     print("Finished")
  

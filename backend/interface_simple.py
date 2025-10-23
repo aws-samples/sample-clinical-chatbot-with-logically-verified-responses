@@ -12,7 +12,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('..'))
 
-from utils import Timer, newline
+from utils import Timer, NEWLINE
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal)
 
 logging.basicConfig(
@@ -32,7 +32,7 @@ def get_facts_nat_lang() -> List[str]:
         try:
             with solver() as s:
                 FACTS_NAT_LANG = s.convert_facts_to_natural_language(s.generate_facts())
-            print(f"FACTS_NAT_LANG:\n{newline.join(FACTS_NAT_LANG)}\n===========")
+            print(f"FACTS_NAT_LANG:\n{NEWLINE.join(FACTS_NAT_LANG)}\n===========")
         except Exception as e:
             logging.error(f"Error generating facts from theorem prover: {e}")
             # Fallback to sample data if theorem prover fails

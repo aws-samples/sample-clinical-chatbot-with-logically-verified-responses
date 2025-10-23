@@ -1,21 +1,184 @@
 """
 Utilities functions
 """
-import re, logging
+import re, logging, struct
 from typing import List
 import datetime
 from time import perf_counter
 from io import StringIO
 
-from cvc5 import Kind, Term
+from cvc5 import Kind, Term, TermManager, RoundingMode, Solver
+from ieee754 import double, single
 
-newline = "\n"
 
-logging.getLogger("utils").setLevel(logging.DEBUG)
-logging.basicConfig(
-    format="%(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler()],
-    level=logging.DEBUG)
+NEWLINE = "\n"
+logger = logging.getLogger("utils")
+logger.setLevel(logging.DEBUG)
+
+
+def normalize_ws(s: str) -> str:
+    """
+    Make strings easier to compare.
+    """
+    s = s.replace("\n", " ")
+    length = len(s)
+    while True:
+        s = s.replace("  ", " ")
+        if len(s) == length:
+            break
+        length = len(s)
+    s = s.replace(") )", "))")
+    return s
+
+
+def split_into_chunks(s: str, chunk_size: int, pad_char: str = "0") -> List[str]:
+    """
+    >>> split_into_chunks("1234", 1)
+    ['1', '2', '3', '4']
+
+    >>> split_into_chunks("1234", 2)
+    ['12', '34']
+
+    >>> split_into_chunks("1234", 3)
+    ['001', '234']
+
+    >>> split_into_chunks("1234", 4)
+    ['1234']
+
+    >>> split_into_chunks("", 4)
+    ['0000']
+    """
+    return _split_into_chunks(s, chunk_size, pad_char)
+
+
+def _split_into_chunks(s: str, chunk_size: int, pad_char: str) -> List[str]:
+    if len(s) <= chunk_size:
+        return [(pad_char * (chunk_size - len(s))) + s]
+    else:
+        return _split_into_chunks(s[:-chunk_size], chunk_size, pad_char) + [s[-chunk_size:]]
+
+    return [s[i:i+chunk_size] for i in range(0, len(s), chunk_size)]
+
+
+def ones_and_zeros_to_int(s: str) -> int:
+    """
+    >>> ones_and_zeros_to_int("101")
+    5
+    >>> ones_and_zeros_to_int("000101")
+    5
+    """
+    if len(s) == 0:
+        return 0
+    else:
+        return ones_and_zeros_to_int(s[:-1]) * 2 + (1 if s[-1] == "1" else 0)
+
+
+def ones_and_zeros_to_bytes(s: str) -> bytes:
+    """
+    Given a string "010....01000" convert into a bytes object.
+    Left pad with 0s.
+    Ignore spaces (this just makes debugging easier).
+
+    >>> ones_and_zeros_to_bytes("01001000").hex()
+    '48'
+
+    >>> ones_and_zeros_to_bytes("1 01001000").hex()
+    '0148'
+    """
+    s = s.replace(" ", "")
+    # print(f"s: {s}")
+    chunks = split_into_chunks(s, 8, pad_char="0")
+    # print(f"chunks: {chunks}")
+    int_chunks = list(map(ones_and_zeros_to_int, chunks))
+    # print(f"int chunks {int_chunks}")
+    byte_arr = bytearray(len(chunks))
+    for i, int_value in enumerate(int_chunks):
+        byte_arr[i] = int_value
+    return bytes(byte_arr)
+
+
+def _double_to_fp32(solver: Solver, x: float) -> Term:
+    """
+    This is just for debugging
+
+    > >> _double_to_fp32(Solver(), -3.14)
+    0 10000000000 1001000111101011100001010001111010111000010100011111
+    """
+
+    ieee754_num = single(x)
+    print(f"ieee754num: {ieee754_num}")
+    assert len(ieee754_num.sign) == 1
+    assert len(ieee754_num.exponent) == 8
+    assert len(ieee754_num.mantissa) == 23
+    bit_str = ieee754_num.sign + ieee754_num.exponent + ieee754_num.mantissa
+    print(f"bit_str {len(bit_str)} {bit_str}")
+    bv = solver.mkBitVector(32, bit_str, 2)
+    rv = solver.mkFloatingPoint(len(ieee754_num.exponent),
+                                len(ieee754_num.sign) + len(ieee754_num.mantissa),
+                                bv)
+    fp_val = rv.getFloatingPointValue()
+    print(f"fp_val {fp_val}")
+    return rv
+
+def double_to_fp64(solver: Solver, x: float) -> Term:
+    """
+    Python float is 64 bits.
+
+    >>> double_to_fp64(Solver(), 13.375)
+    (fp #b0 #b10000000010 #b1010110000000000000000000000000000000000000000000000)
+
+    >>> double_to_fp64(Solver(), -13.375)
+    (fp #b1 #b10000000010 #b1010110000000000000000000000000000000000000000000000)
+
+    """
+
+    # rv = solver.mkFloatingPoint(11, 53, solver.mkBitVector(64, binary_representation, 2))
+    ieee754_num = double(x)
+    # print(f"ieee754num: {ieee754_num}")
+    assert len(ieee754_num.sign) == 1
+    assert len(ieee754_num.exponent) == 11
+    assert len(ieee754_num.mantissa) == 52
+    bit_str = ieee754_num.sign + ieee754_num.exponent + ieee754_num.mantissa
+    # print(f"bit_str {bit_str}")
+    bv = solver.mkBitVector(64, bit_str, 2)
+    rv = solver.mkFloatingPoint(len(ieee754_num.exponent),
+                                len(ieee754_num.sign) + len(ieee754_num.mantissa),
+                                bv)
+    return rv
+
+
+def fp64_to_float(x: Term) -> float:
+    """
+    x is a 64-bit floating point Term, return that as a Python double.
+
+    >>> fp64_to_float(double_to_fp64(Solver(), 3.1415))
+    3.1415
+
+    >>> fp64_to_float(double_to_fp64(Solver(), 42))
+    42.0
+    
+    >>> fp64_to_float(double_to_fp64(Solver(), 10))
+    10.0
+    
+    >>> fp64_to_float(double_to_fp64(Solver(), 55))
+    55.0
+    
+    >>> fp64_to_float(double_to_fp64(Solver(), -55))
+    -55.0
+    
+    >>> fp64_to_float(double_to_fp64(Solver(), 100))
+    100.0
+
+    >>> fp64_to_float(double_to_fp64(Solver(), -100))
+    -100.0
+    """
+    exp_width, significant_width, bits_term = x.getFloatingPointValue()
+    assert (exp_width, significant_width) == (11, 53)
+    bits_str = bits_term.getBitVectorValue()
+    # print(f"bits str {type(bits_str)} {len(bits_str)} {bits_str}")
+    bits = ones_and_zeros_to_bytes(bits_str)
+    # print(f"bits {type(bits)} {len(bits)} {bits}")
+    return struct.unpack(">d", bits)[0]  # big endian
 
 class Timer:
     """
@@ -48,7 +211,7 @@ def extract_result(text: str) -> str:
     pattern = r"<result>\s*(.*?)\s*</result>"
     matches = re.findall(pattern, text, re.DOTALL)
     rv = matches[-1].strip() if len(matches) > 0 else None
-    logging.info("extract_result -> %s", rv)
+    logger.info("extract_result -> %s", rv)
     return rv
 
 def parse_sexpr_from_str(sexpr: str, verbose: bool=False):
@@ -212,19 +375,21 @@ def join_fancy(*args: List[str]) -> str:
         return f"{', '.join(args[:-1])}, and {args[-1]}"
 
 
-def print_types(term, indent:str = ""):
-    """
-    Just for debugging
-    """
-    # print(f"print_types {term} {type(term)}")
+def dump_term(term: Term, indent:str = "") -> str:
+    buf = StringIO()
+    dump_term2(term, buf, indent)
+    return buf.getvalue()
+
+def dump_term2(term: Term, buf: StringIO, indent:str = ""):
+    # print(f"dump_term {term} {type(term)}")
     if isinstance(term, (str, int, float)):
-        print(f"types>{indent}{type(term)} value <<{term}>>")
+        buf.write(f"dump>{indent}{type(term)} value <<{term}>>\n")
     else:
-        print(f"types>{indent}term.kind = {term.getKind()} value <<{term}>>")
-        # print(dir(term))
-        if term.getKind() in {Kind.NOT, Kind.EQUAL, Kind.AND, Kind.OR}:
+        kind = term.getKind()
+        buf.write(f"dump>{indent}kind = {kind} value <<{term}>>\n")
+        if term.getNumChildren() > 0:
             for i in range(term.getNumChildren()):
-                print_types(term[i], indent+"    ")
+                dump_term2(term[i], buf, indent+"    ")
 
 class IndentedIO (StringIO):
     """
@@ -273,11 +438,11 @@ def pprint_term2(term: Term, with_newlines: bool, indent: int = 0) -> str:
     A wrapper around _pprint_term() that takes care
     of the IndentedIO buffer.
     """
-    logging.info("pprint_term2 %s %s %d", str(term), str(with_newlines), indent)
+    # logger.info("pprint_term2 %s %s %d", str(term), str(with_newlines), indent)
     buf = IndentedIO(curr_indent=indent)
     _pprint_term(term, buf, with_newlines)
     rv = buf.getvalue()
-    logging.info("pprint_term2 %s -> %s", str(term), rv)
+    # logger.info("pprint_term2 %s -> %s", str(term), rv)
     return rv
 
 def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
@@ -291,11 +456,22 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
         buf.write("(")
         buf.write(f"{kind_name}")
         buf.write(" ")
-        _pprint_term(term[0], buf, with_newlines)
+        # _pprint_term(term[0], buf, with_newlines)
+        buf.write("(")
+        for var in term[0]:
+            buf.write("(" + str(var) + " ")
+            if "FloatingPoint" in str(var.getSort()):
+                buf.write("FP")
+            else:
+                buf.write(str(var.getSort()))
+            buf.write(")")
+        buf.write(")")
+
         buf.write(maybe_newline)
         if term.getNumChildren() >= 3:
             buf.write("(! ")
             buf.new_next_indent(buf.get_curr_indent())
+
         _pprint_term(term[1], buf, with_newlines)
         if term.getNumChildren() >= 3:
             buf.write(maybe_newline)
@@ -305,11 +481,18 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
             buf.pop_next_indent()
         buf.write(")")
         buf.pop_next_indent()
-    elif kind in {Kind.AND, Kind.OR, Kind.EQUAL, Kind.IMPLIES}:
-        if kind_name == "equal":
-            kind_name = "="
-        elif kind_name == "implies":
-            kind_name = "=>"
+    elif kind in {Kind.AND, Kind.OR, Kind.EQUAL, Kind.FLOATINGPOINT_EQ,
+                  Kind.IMPLIES, Kind.FLOATINGPOINT_LT, Kind.FLOATINGPOINT_LEQ,
+                  Kind.FLOATINGPOINT_GT, Kind.FLOATINGPOINT_GEQ }:
+        kind_name = {
+            "equal": "=",
+            "implies": "=>",
+            "floatingpoint_eq": "fp=",
+            "floatingpoint_lt": "fp<",
+            "floatingpoint_gt": "fp>",
+            "floatingpoint_leq": "fp<=",
+            "floatingpoint_geq": "fp>="
+        }.get(kind_name, kind_name)
         buf.write(f"({kind_name} ")
         buf.new_next_indent(buf.get_curr_indent())
         for idx in range(term.getNumChildren()):
@@ -318,13 +501,59 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
             _pprint_term(term[idx], buf, with_newlines)
         buf.write(")")
         buf.pop_next_indent()
-    elif kind in {Kind.NOT}:
+    elif kind == Kind.NOT:
         buf.write(f"({kind_name} ")
         _pprint_term(term[0], buf, with_newlines)
+        buf.write(")")
+    elif kind == Kind.INTERNAL_KIND:
+        print(f"++++ internal kind {term}")
+        buf.write(str(term))
+    elif kind == Kind.CONST_FLOATINGPOINT:
+        if term.isFloatingPointNaN():
+            buf.write("NaN")
+        else:
+            buf.write(str(fp64_to_float(term)))
+    elif kind == Kind.APPLY_CONSTRUCTOR:
+        print(f"++++ about to deal with {kind} {term}")
+        if term.getNumChildren() == 0:
+            print(f"++++ No children so {term}")
+            buf.write(str(term))
+        elif term.getNumChildren() == 1:
+            buf.write(str(term))
+        else:
+            print(f"++++ {term.getNumChildren()} children")
+            buf.write("(" + str(term[0]))
+            for i, child in enumerate(term):
+                if i > 0:
+                    buf.write(" ")
+                    _pprint_term(child, buf, with_newlines)
+            buf.write(")")
+    elif kind == Kind.APPLY_UF:
+        print(f"++++ about to deal with {kind} {term}")
+        if term.getNumChildren() == 0:
+            print(f"++++ No children so {term[0]}")
+            buf.write(term[0])
+        else:
+            print(f"++++ {term.getNumChildren()} children")
+            buf.write("(" + str(term[0]))
+            for i, child in enumerate(term):
+                if i > 0:
+                    buf.write(" ")
+                    _pprint_term(child, buf, with_newlines)
+            buf.write(")")
+    elif term.getNumChildren() > 0:
+        buf.write("(" + kind_name)
+        for i, child in enumerate(term):
+            buf.write(" ")
+            _pprint_term(child, buf, with_newlines)
         buf.write(")")
     else:
         buf.write(str(term))
 
 if __name__ == "__main__":
     import doctest
+    logging.basicConfig(
+        format="%(levelname)s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler()],
+        level=logging.DEBUG)
     doctest.testmod()

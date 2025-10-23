@@ -3,14 +3,16 @@ FastAPI backend for React Chatbot
 Provides chat API endpoints with proper error handling and CORS support
 """
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
 import asyncio
 import random
 from typing import Dict, Any
 import logging
 import json
+import traceback
+
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
@@ -92,6 +94,7 @@ async def get_facts():
         
     except Exception as e:
         logger.error(f"Error fetching facts: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -99,7 +102,7 @@ async def get_facts():
                 "message": "Could not retrieve theorem prover facts",
                 "retryable": True
             }
-        )
+        ) from e
 
 @app.get("/api/axioms", response_model=AxiomsResponse)
 async def get_axioms():
@@ -129,6 +132,7 @@ async def get_axioms():
         
     except Exception as e:
         logger.error(f"Error fetching axioms: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -136,7 +140,7 @@ async def get_axioms():
                 "message": "Could not retrieve theorem prover axioms",
                 "retryable": True
             }
-        )
+        ) from e
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def send_message(request: ChatRequest):

@@ -12,7 +12,7 @@ import rich
 from cvc5 import Result
 from strands import Agent, tool
 
-from utils import Timer, extract_result, newline
+from utils import Timer, extract_result, NEWLINE
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal,
                   check_statement_validity, pprint_term)
 
@@ -20,8 +20,7 @@ logging.getLogger("interface").setLevel(logging.DEBUG)
 logging.basicConfig(
     format="%(levelname)s | %(name)s | %(message)s",
     handlers=[logging.StreamHandler()],
-    level=logging.DEBUG
-)
+    level=logging.DEBUG)
 
 # Configure Strands agents logging
 logging.getLogger("strands").setLevel(logging.DEBUG)
@@ -55,7 +54,7 @@ def get_facts_nat_lang() -> List[str]:
     if FACTS_NAT_LANG is None:
         with solver() as s:
             FACTS_NAT_LANG = s.convert_facts_to_natural_language(s.generate_facts())
-        print(f"FACTS_NAT_LANG:\n{newline.join(FACTS_NAT_LANG)}\n===========")
+        print(f"FACTS_NAT_LANG:\n{NEWLINE.join(FACTS_NAT_LANG)}\n===========")
     return FACTS_NAT_LANG
 
 def get_axioms_as_str() -> List[str]:
@@ -70,7 +69,7 @@ def get_axioms_as_str() -> List[str]:
             axioms = s.generate_all_axioms(facts)
             # Return axioms exactly as they come from the theorem prover
             AXIOMS_AS_STR = [pprint_term(axiom) for axiom in axioms]
-        print(f"AXIOMS_AS_STR:\n{newline.join(AXIOMS_AS_STR)}\n===========")
+        print(f"AXIOMS_AS_STR:\n{NEWLINE.join(AXIOMS_AS_STR)}\n===========")
     return AXIOMS_AS_STR
 
 TODAY = convert_epochal_to_str(int(datetime.datetime.now().timestamp()/
@@ -103,18 +102,17 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
     prompt = dedent(f"""\
         Your task is to convert a natural language statement into a first-order logical well-formed formula.
         You have available the following functions:
-        * (heart-rate time) -> optional real. This represents a measurement of the patient's heart rate at a
+        * (heart-rate time) -> floating-point. This represents a measurement of the patient's heart rate at a
           particular `time`. The `time` is Unix-style epochal time (an integer).
-          If the heart-rate at `time` is known then the value of (heart-rate a_time) is a
-          real number indicating the value that was measured at `a_time` (represented as `(known <value>)`).
-          If the heart-trate at `time` is unknown then we represent this as `unknown`
-        * (weight time) -> optional real. This represents a measurement of the patient's weight at a
+          If the patient's heart-rate at `time` is not known then the value of `(heart-rate time)` is NaN.
+          If the heart-rate is known, then the value of `(heart-rate time)` will be floating point number like 50.2.
+        * (weight time) -> floating-point. This represents a measurement of the patient's weight at a
           particular `time`. This is similar to the `heart-rate` function: the time is an integer and the
-          result is either `unknown` or `(known <x>)`.
+          result is a number like 42.0 (if the weight is known at that time) or NaN (if it is unknown).
         * name -> string. This is a zero-arity function (a constant) whose value is the name of the patient.
-        * birth-date -> real. This is a zero-arity function (a constant) whose value is the
+        * birth-date -> floating point. This is a zero-arity function (a constant) whose value is the
           birth date of the patient (represented as Unix-style epochal).
-        * age -> real. This is a zero-arity function (a constant) whose value is the
+        * age -> floating point. This is a zero-arity function (a constant) whose value is the
           age of the patient in years.
         * (D ICD-code time) -> tfu_true/tfu_false/tfu_unknown. This represents whether the 
           patient was diagnosed as having ICD code `ICD-code` on or before `time`.
@@ -126,20 +124,37 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
         tool. For example, "2005-01-31" should map to 12815 and "2006-01-31" should map to 13180.
 
         You can use first-order logic. For example:
-        * ```(= X Y)``` asserts that X and Y are equal.
+        * ```(= X Y)``` asserts that X and Y are equal (if X and Y are not floating points).
+        * ```(fp= X Y)``` asserts that X and Y are equal (if X and Y are floating points).
         * ```(not X)``` asserts that X is false.
         * ```(and X Y)``` asserts that both X and Y are true.
         * ```(=> X Y)``` is logically equivalent to ``(or (not X) Y)```.
-        * ```(forall ((time Int)) (> (heart-rate time) 50)`` asserts that for all times, the patient's heart rate is more than 50.
-        * ```(exists ((time Int)) (> (heart-rate time) 50)`` asserts that there is at least one time at which the patient's heart rate is more than 50.
+        * ```(forall ((time Int)) (fp> (heart-rate time) 50)`` asserts that for all times, the patient's heart rate is more than 50.
+        * ```(forall ((hr FP)) (fp> (heart-rate time) hr)`` asserts that for all heart rates, the patient's heart rate is more than that.
+        * ```(exists ((time Int)) (fp> (heart-rate time) 50)`` asserts that there is at least one time at which the patient's heart rate is more than 50.
+        * ```NaN```, not-a-number, is used to represent unknown measurements.
         
+        If you want to compare two float-point numbers (e.g. two heart rates, two weights) then you must use
+        `(fp< a b)`, `(fp>= a b)`, `(fp+ a b)`, `(fp= a b)`, etc.
+
+        If you want to represent a floating point number (for e.g., a heart rate or a weight) then you MUST
+        use floating point literals: 123.0, not 123.
+
         For example, given the statement
 
             ```The patient's heart rate 2017-01-01 was 45.6```
 
         you should convert this into
 
-            ```(= (heart-rate 17167) (known 45.6))```
+            ```(fp= (heart-rate 17167) 45.6)```
+
+        Also, the statement
+
+            ```The patient's heart rate 2017-01-01 is unknown```
+
+        you should convert this into
+
+            ```(fp= (heart-rate 17167) NaN)```
 
         You should return your result in xml tags: <result>....</result>.
 
@@ -168,7 +183,7 @@ chatbot_system_prompt = dedent(f"""\
     You will be asked questions about a patient and we
     know this about them:
 
-    {f"{newline}    ".join(get_facts_nat_lang())}
+    {f"{NEWLINE}    ".join(get_facts_nat_lang())}
     
     The current date is {TODAY}
 
