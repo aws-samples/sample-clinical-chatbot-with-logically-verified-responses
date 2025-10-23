@@ -195,20 +195,6 @@ class Function:
             formal_args = [s.mkVar(arg_sort, arg_name)
                            for arg_name, arg_sort in self.args]
             logger.info("formal_args %s", formal_args)
-            # if self.return_sort == self.solver.fp64_sort:
-            #     undefined = s.mkNaN()
-            # elif self.return_sort == s.tfu_sort:
-            #     undefined = s.mk_tfu_true_or_false()
-            # else:
-            #     raise Exception(f"port me: {self.return_sort}")
-            # undefined = s.undefined_real if self.return_sort == s.getRealSort() else \
-            #                 s.undefined_str if self.return_sort == s.getStringSort() else \
-            #                    None # this signals an error
-            # if formal-args are A and B:
-            # (forall (A B)
-            #   (= (and (not (and (= A fact_0_A) (= B fact_0_B)))
-            #           .... for all facts ....)
-            #      (= (F A B) undefined)))
             if len(relevant_facts) > 0:
                 not_defined = \
                     s.and_(
@@ -219,13 +205,20 @@ class Function:
                                     s.convert_literal_to_term(arg_val))
                                   for arg_term, arg_val in zip(formal_args, fact.args)]))
                           for fact in relevant_facts])
-            else:
-                not_defined = s.mkBoolean(False)
-            axiom = s.forall(formal_args,
-                        s.equal(
+                body = s.equal(
                             not_defined,
-                            s.equal_fp(s.apply(self, formal_args),
-                                    s.mkNaN())))
+                            s.equal(s.apply(self, formal_args),
+                                    #    double_to_fp64(s, 42.0)
+                                       s.mkNaN()
+                                    ))
+            else:
+                body = s.equal(s.apply(self, formal_args),
+                                    #    double_to_fp64(s, 42.0)
+                                  s.mkNaN()
+                                )
+            trigger = s.mkTerm(Kind.INST_PATTERN, s.apply(self, [formal_args[0]]))
+            axiom = s.forall(formal_args, body,
+                             s.mkTerm(Kind.INST_PATTERN_LIST, trigger))
             results.append(axiom)
         logger.info("CWA axioms for %s:", self.name)
         logger.info("%s", NEWLINE.join(map(str,results)))
@@ -455,8 +448,12 @@ class Solver (cvc5.Solver):
         return double_to_fp64(self, num)
 
     def mkTerm(self, *args, **kwargs) -> Term:
-        self.all_terms.append(result := super().mkTerm(*args, **kwargs))
-        return result
+        try:
+            self.all_terms.append(result := super().mkTerm(*args, **kwargs))
+            return result
+        except Exception as ex:
+            print(f"args: {args} kwargs {kwargs}")
+            raise ex
 
     def mkReal(self, *args, **kwargs) -> Term:
         self.all_terms.append(result := super().mkReal(*args, **kwargs))
@@ -873,7 +870,7 @@ def show_info_about_result(s: Solver, this_result: Result):
         logger.info("\nUnsat core:")
         for term in unsat_core:
             logger.info("Unsat core> %s", pprint_term(term))
-            logger.info(dump_term(term))
+            # logger.info(dump_term(term))
         logger.info("unsat core=======================")
     if this_result.isSat():
         logger.info("Getting model")
@@ -881,17 +878,16 @@ def show_info_about_result(s: Solver, this_result: Result):
         logger.info(m)
     logger.info("Asserts according to the solver:")
     for assertion in s.getAssertions():
-        logger.info(assertion)
+        # logger.info(assertion)
         logger.info(pprint_term(assertion))
 
 
-def create_solver_and_check_sat(test_statement_str: str) -> Optional[bool]:
+def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
     """
     Note that the facts are baked into the Solver. To use a different set of
     facts, create a subclass of Solver.
     """
-    logger.info("create_solver_and_check_sat %s", test_statement_str)
-    assert test_statement_str
+    logger.info("create_solver_and_check_sat %s", test_stmt_strs)
     s = Solver()
 
     facts = s.generate_facts()
@@ -906,17 +902,23 @@ def create_solver_and_check_sat(test_statement_str: str) -> Optional[bool]:
         logger.info(pprint_term(axiom, 0))
     logger.info("====================\n")
 
-    test_stmt = s.sexpr_str_to_term(test_statement_str)
-    logger.info(f"Test statement:\n{pprint_term(test_stmt)})")
+    if test_stmt_strs:
+        test_stmts = list(map(s.sexpr_str_to_term, test_stmt_strs))
+        logger.info("Test statements:")
+        for test_stmt in test_stmts:
+            logger.info(pprint_term(test_stmt))
+        all_axioms = axioms + test_stmts
+    else:
+        all_axioms = axioms
 
-    for stmt in axioms + [test_stmt]:
+    for stmt in all_axioms:
         logger.info("(assert %s", pprint_term(stmt, indent=2))
         s.assertFormula(stmt)
 
     logger.info("checking sat")
     this_result = s.checkSat()
     show_info_about_result(s, this_result)
-    logger.info(f"create_solver_and_check_sat {test_statement_str} -> {this_result}")
+    logger.info(f"create_solver_and_check_sat {test_stmt_strs} -> {this_result}")
     # Python seems not to be GCing `all_functions` correctly.
     # this line prevents a SEGFAULT:
     s.all_functions = None
@@ -1103,18 +1105,50 @@ if __name__ == "__main__":
     # valid = create_solver_and_check_sat("(exists ((time Int)) (and (not (= (heart-rate time) NaN)) (> (heart-rate time) 100.0)))")
     # assert valid.isUnsat(), valid
 
-
-    valid = create_solver_and_check_sat("(exists ((time Int)) (> (heart-rate time) 100.0))")
+    valid = create_solver_and_check_sat("(= name \"John Smith\")")
     assert valid.isUnsat(), valid
 
-    valid = create_solver_and_check_sat("(not (exists ((time Int)) (< (heart-rate time) 100.0)))")
-    assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(not (= name \"John Smith\"))")
+    # assert valid.isSat(), valid
+    # valid = create_solver_and_check_sat("(= name \"John Smith\")")
+    # assert valid.isUnsat(), valid
 
-    valid = create_solver_and_check_sat("(not (exists ((time Int)) (> (heart-rate time) 10.0)))")
-    assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(= NaN NaN)")
+    # assert valid.isSat(), valid
 
-    valid = create_solver_and_check_sat("(exists ((time Int)) (< (heart-rate time) 10.0))")
-    assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)", "(fp= (heart-rate 12815) NaN)")
+    # assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(not (and (fp= (heart-rate 12815) 55.0) (fp= (heart-rate 12815) NaN)))")
+    # assert valid.isSat(), valid
+    # valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
+                                        # "(forall ((t Int)) (fp= (heart-rate t) NaN))")
+    # assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(not (fp= (heart-rate 12815) 55.0))",
+    #                                     # "(forall ((t Int)) (fp= (heart-rate t) NaN) :pattern ((heart-rate t)))"
+    #                                     )
+    # assert not valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(= (heart-rate 42) NaN)")
+    # assert not valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(not (= (heart-rate 42) NaN))")
+    # assert not valid.isSat(), valid
+    
+    # valid = create_solver_and_check_sat("(not (fp= (heart-rate 42) NaN))")
+    # assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
+    # assert valid.isUnsat(), valid
+    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
+    # assert not valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (< (heart-rate time) 100.0)))")
+    # assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (> (heart-rate time) 10.0)))")
+    # assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(exists ((time Int)) (< (heart-rate time) 10.0))")
+    # assert valid.isUnsat(), valid
 
     # valid = create_solver_and_check_sat("(> (heart-rate 12815) 100.0)")
     # assert valid.isUnsat(), valid

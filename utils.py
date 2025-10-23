@@ -446,9 +446,9 @@ def pprint_term2(term: Term, with_newlines: bool, indent: int = 0) -> str:
     return rv
 
 def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
-    logging.info("_pprint_term %s %s", str(term), type(term))
+    # logging.info("_pprint_term %s %s", str(term), type(term))
     kind = term.getKind()
-    logging.info("kind %s", str(kind))
+    # logging.info("kind %s", str(kind))
     maybe_newline = "\n" if with_newlines else " "
     kind_name = str(kind)[5:].lower()
     if kind in {Kind.FORALL, Kind.EXISTS}:
@@ -506,7 +506,6 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
         _pprint_term(term[0], buf, with_newlines)
         buf.write(")")
     elif kind == Kind.INTERNAL_KIND:
-        print(f"++++ internal kind {term}")
         buf.write(str(term))
     elif kind == Kind.CONST_FLOATINGPOINT:
         if term.isFloatingPointNaN():
@@ -514,14 +513,11 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
         else:
             buf.write(str(fp64_to_float(term)))
     elif kind == Kind.APPLY_CONSTRUCTOR:
-        print(f"++++ about to deal with {kind} {term}")
         if term.getNumChildren() == 0:
-            print(f"++++ No children so {term}")
             buf.write(str(term))
         elif term.getNumChildren() == 1:
             buf.write(str(term))
         else:
-            print(f"++++ {term.getNumChildren()} children")
             buf.write("(" + str(term[0]))
             for i, child in enumerate(term):
                 if i > 0:
@@ -529,12 +525,9 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
                     _pprint_term(child, buf, with_newlines)
             buf.write(")")
     elif kind == Kind.APPLY_UF:
-        print(f"++++ about to deal with {kind} {term}")
         if term.getNumChildren() == 0:
-            print(f"++++ No children so {term[0]}")
             buf.write(term[0])
         else:
-            print(f"++++ {term.getNumChildren()} children")
             buf.write("(" + str(term[0]))
             for i, child in enumerate(term):
                 if i > 0:
