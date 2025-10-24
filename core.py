@@ -274,16 +274,14 @@ class InterpolatableFunction (Function):
         logger.info("formal args %s", formal_args)
         # formal_args is ICD, time
         ICD = s.mkVar(s.getStringSort(), "ICD")
-        # t0 = s.mkVar(s.getIntegerSort(), "t0")
-        # t1 = s.mkVar(s.getIntegerSort(), "t1")
         time = s.mkVar(s.getIntegerSort(), "time")
         tfu_t = s.mk_tfu_true()
         tfu_f = s.mk_tfu_false()
 
-        for observed_ICD in observed_icds:
-            these_facts = [fact for fact in relevant_facts if fact.args[0] == observed_ICD]
+        for observed_icd in observed_icds:
+            these_facts = [fact for fact in relevant_facts if fact.args[0] == observed_icd]
             logger.info("Found %s relevant facts for %s",
-                        len(these_facts), observed_ICD)
+                        len(these_facts), observed_icd)
             these_times = {fact.args[1] for fact in these_facts}
             logger.info("These times: %s", these_times)
             min_time, max_time = min(these_times), max(these_times)
@@ -327,7 +325,6 @@ class InterpolatableFunction (Function):
                         type(most_recent_diagnosis))
 
             trigger = s.mkTerm(Kind.INST_PATTERN, s.apply(self, [ICD, time]))
-
             axiom = s.forall([ICD, time],
                         s.equal(s.lt(time, s.mkInteger(min_time)),
                                 s.equal(s.apply(self, [ICD, time]),
@@ -348,6 +345,7 @@ class InterpolatableFunction (Function):
             results.append(axiom)
         return results
 
+
 class Fact:
     """
     Simple facts: a function with some args and a result
@@ -360,9 +358,11 @@ class Fact:
     def __str__(self):
         return f"Fact({self.function.name} {self.args} -> {self.result})"
 
-    def __repr__(self): return self.__str__()
+    def __repr__(self):
+        return self.__str__()
 
     def as_natural_language(self):
+        """ Return natural language representation of this fact."""
         return self.function.as_natural_language(self)
 
 
@@ -414,18 +414,6 @@ class Solver (cvc5.Solver):
         # self.undefined_real = self.mkReal(-666.0)
         self.undefined_str = self.mkString("%%undefined%%")
         self.tfu_cache: Dict[str, Term] = None
-        #
-        # optReal = Either a Real or unknown
-        #
-        # self.opt_real_decl = self.mkDatatypeDecl("optReal")
-        # known_ctor = self.mkDatatypeConstructorDecl("known")
-        # known_ctor.addSelector("value", self.getRealSort())
-        # self.opt_real_decl.addConstructor(known_ctor)
-        # unknown_ctor = self.mkDatatypeConstructorDecl("unknown")
-        # self.opt_real_decl.addConstructor(unknown_ctor)
-        
-        # self.opt_real_sort = self.mkDatatypeSort(self.opt_real_decl)
-        # self.opt_real = self.opt_real_sort.getDatatype()
         self.fp64_sort = self.mkFloatingPointSort(11, 53)
         self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_NEAREST_TIES_TO_EVEN)
 
@@ -487,25 +475,6 @@ class Solver (cvc5.Solver):
     def mk_tfu_true(self) -> Term:          return self.mk_tfu("true")
     def mk_tfu_false(self) -> Term:         return self.mk_tfu("false")
     def mk_tfu_true_or_false(self) -> Term: return self.mk_tfu("true_or_false")
-
-    # def mk_opt_real(self, which: str,
-    #                 value: Optional[Union[float, Term]]= None) -> Term:
-    #     if which == "known":
-    #         args = [self.mkReal(value)] if isinstance(value, float) else [value]
-    #     else:
-    #         args = []
-    #     logger.info("in mk_opt_real, args %s %s", args, [type(x) for x in args])
-    #     rv = self.mkTerm(Kind.APPLY_CONSTRUCTOR,
-    #                      self.opt_real.getConstructor(which).getTerm(),
-    #                      *args)
-    #     logger.info("mk_opt_real -> %s", rv)
-    #     return rv
-
-    # def mk_opt_real_known(self, x: float) -> Term:
-    #     return self.mk_opt_real("known", x)
-
-    # def mk_opt_real_unknown(self) -> Term:
-    #     return self.mk_opt_real("unknown")
 
     def find_by_name(self, func_name: str) -> Function:
         for func in self.all_functions:
@@ -587,8 +556,8 @@ class Solver (cvc5.Solver):
                         children[0].getSort() == self.getIntegerSort() and
                         children[1].getKind() == Kind.CONSTANT and       # arg1 is (0-arity) function
                         children[1].getSort() == self.fp64_sort):
-                       logger.info("coercing integer constant to real for %s", children[1])
-                       children[0] = self.mkReal(float(children[0].getIntegerValue()))
+                       logger.info("coercing integer constant to fp64 for %s", children[1])
+                       children[0] = self.mkFp64(float(children[0].getIntegerValue()))
                     if (children[0].getKind() == Kind.CONSTANT and       # arg0 is (0-arity) function
                         children[0].getSort() == self.fp64_sort and 
                         children[1].getKind() == Kind.CONST_INTEGER and # arg1 is literal int
