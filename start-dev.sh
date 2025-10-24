@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 # Start backend server in background
 echo "🚀 Starting backend server on http://localhost:8000"
-python run.py &
+python3 run.py &
 BACKEND_PID=$!
 
 # Wait a moment for backend to start

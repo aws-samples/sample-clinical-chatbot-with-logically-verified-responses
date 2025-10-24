@@ -1,6 +1,6 @@
 # React Chatbot with FastAPI Backend: Installation
 
-This repo contains a chatbot that is built with a React frontend and a FastAPI backend. Features real-time messaging, comprehensive error handling, responsive design, and full accessibility support.
+This has been tested on Ubuntu 24.04 and Mac OS 15.7.1.
 
 ## 🚀 Quick Start
 
@@ -9,7 +9,27 @@ This repo contains a chatbot that is built with a React frontend and a FastAPI b
 - **Node.js** 16+ and npm
 - **Python** 3.8+ and pip
 
+#### Installing node & npm on Ubuntu:
+
+```
+wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash # then restart shell
+nvm install node
+```
+
+#### Installing Python 3.12 on Ubuntu:
+
+Python 3.12.3 comes pre-installed. Then, do this:
+
+```
+sudo apt update
+sudo apt install python3.12-venv
+sudo apt install python3-pip
+pip3 install backend/requirements.txt
+```
+
+
 ### Easy Development Setup
+
 
 #### Option 1: Automated Setup (Recommended)
 
@@ -70,39 +90,6 @@ npm start
 - **CORS support** for frontend integration
 - **Comprehensive error handling** with proper HTTP status codes
 - **API documentation** with OpenAPI/Swagger
-
-## 🎯 Features
-
-### Core Functionality
-- ✅ Real-time chat messaging
-- ✅ Contextual AI responses
-- ✅ Message history and conversation flow
-- ✅ Typing indicators
-- ✅ Auto-scroll to latest messages
-- ✅ Message retry functionality
-
-### User Experience
-- ✅ Responsive design (mobile-first)
-- ✅ Smooth animations and transitions
-- ✅ Loading states and feedback
-- ✅ Error handling with user-friendly messages
-- ✅ Keyboard shortcuts (Enter to send, Escape to clear)
-
-### Accessibility
-- ✅ Screen reader compatibility
-- ✅ Keyboard navigation
-- ✅ ARIA labels and roles
-- ✅ Focus management
-- ✅ High contrast support
-- ✅ Semantic HTML structure
-
-### Developer Experience
-- ✅ TypeScript for type safety
-- ✅ Comprehensive test coverage (146 tests)
-- ✅ ESLint and code formatting
-- ✅ Hot reload development
-- ✅ API documentation
-- ✅ Error logging and monitoring
 
 ## 🧪 Testing
 
@@ -184,6 +171,7 @@ npm run build
 ```bash
 cd backend
 pip install -r requirements.txt
+# update appropriate shell variables to authenticate with AWS
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
