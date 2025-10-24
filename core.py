@@ -441,7 +441,7 @@ class Solver (cvc5.Solver):
     def mkNaN(self) -> Term:
         rv = self.mkFloatingPointNaN(exp=11, sig=53)
         assert rv.isFloatingPointNaN()
-        logger.info("This is a NaN: %s", rv)
+        # logger.info("This is a NaN: %s", rv)
         return rv
 
     def mkFp64(self, num: float) -> Term:
@@ -623,7 +623,7 @@ class Solver (cvc5.Solver):
         """
         if variables is None:
             variables = []
-        # logger.info(f"_convert_literal_to_term {x} {type(x)} vars {' '.join([str(v) for v in variables])} known_sort {known_sort}")
+        logger.info(f"_convert_literal_to_term {x} {type(x)} vars {' '.join([str(v) for v in variables])} known_sort {known_sort}")
         if variables is None:
             variables = []
         if isinstance(x, str) and x == "tfu_true":

@@ -483,17 +483,23 @@ def _pprint_term(term: Term, buf: IndentedIO, with_newlines: bool):
         buf.pop_next_indent()
     elif kind in {Kind.AND, Kind.OR, Kind.EQUAL, Kind.FLOATINGPOINT_EQ,
                   Kind.IMPLIES, Kind.FLOATINGPOINT_LT, Kind.FLOATINGPOINT_LEQ,
-                  Kind.FLOATINGPOINT_GT, Kind.FLOATINGPOINT_GEQ }:
-        kind_name = {
+                  Kind.FLOATINGPOINT_GT, Kind.FLOATINGPOINT_GEQ,
+                  Kind.LT, Kind.LEQ, Kind.GT, Kind.GEQ}:
+        new_kind_name = {
             "equal": "=",
             "implies": "=>",
+            "gt": ">",
+            "lt": "<",
+            "geq": ">=",
+            "leq": "<=",
             "floatingpoint_eq": "fp=",
             "floatingpoint_lt": "fp<",
             "floatingpoint_gt": "fp>",
             "floatingpoint_leq": "fp<=",
             "floatingpoint_geq": "fp>="
         }.get(kind_name, kind_name)
-        buf.write(f"({kind_name} ")
+        # print(f"kind_name {kind_name} -> {new_kind_name}")
+        buf.write(f"({new_kind_name} ")
         buf.new_next_indent(buf.get_curr_indent())
         for idx in range(term.getNumChildren()):
             if idx > 0:
