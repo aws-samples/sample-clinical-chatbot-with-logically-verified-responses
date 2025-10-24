@@ -3,11 +3,13 @@ Code to help represent the facts in the medical records and to transform
 those into a theory (a set of WFFs)
 """
 
+import datetime
+import os
+import logging
 from typing import List, Tuple, Union, Optional, Dict
 from contextlib import contextmanager
 from textwrap import dedent
 from multiprocessing import Process, Queue
-import datetime, os, logging
 
 from cvc5 import Sort, Term, Kind, Result, RoundingMode
 import cvc5
@@ -56,7 +58,8 @@ SUPPORTED_KINDS = {
     "exists": Kind.EXISTS,
     "=>": Kind.IMPLIES,
     "implies": Kind.IMPLIES,
-    "->": Kind.IMPLIES}
+    "->": Kind.IMPLIES
+}
 
 
 class Function:
@@ -79,7 +82,6 @@ class Function:
         if len(self.args) > 0:
             this_sort = self.solver.mkFunctionSort(self.arg_sorts,
                                                     return_sort)
-            # print(f"{name} has function sort: {this_sort}")
         else:
             this_sort = return_sort
         self.cvc5_const = self.solver.mkConst(this_sort, name)
@@ -95,11 +97,9 @@ class Function:
         """
         fact has type Fact
         """
-        # print(f"as_natural_language")
         s = self.solver
         pprint_name = self.name.replace("_", " ").replace("-", " ")
         def add_units(value, units: Tuple[str, str]):
-            # print(f"add_units {value} {type(value)}")
             if units:
                 if isinstance(value, (int, float)) :
                     return f"{value} {units[0]}" if value == 1 \
@@ -131,12 +131,10 @@ class Function:
             return f"The patient's {pprint_name}{args_str} was "\
                    f"{add_units(fact.result, self.return_units)}{on_str}"
         else:
-            # print(f"self.return_units {self.return_units}")
             if "epochal day" in str(self.return_units).lower():
                 result = convert_epochal_to_str(fact.result)
             else:
                 result = add_units(fact.result, self.return_units)
-            # print(f"result: {result}")
             return f"The patient's {pprint_name} is {result}"
 
     def generate_core_axioms(self, facts: list):
@@ -410,7 +408,6 @@ class Solver (cvc5.Solver):
         unknown_ctor = self.mkDatatypeConstructorDecl("tfu_true_or_false")
         self.tfu_decl.addConstructor(unknown_ctor)
 
-        # print(f"tfu_decl = {self.tfu_decl}")
         self.tfu_sort = self.mkDatatypeSort(self.tfu_decl)
         self.tfu = self.tfu_sort.getDatatype()
 
@@ -421,7 +418,7 @@ class Solver (cvc5.Solver):
         self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_NEAREST_TIES_TO_EVEN)
 
     def __del__(self):
-        print(f"Destroying {self}")
+        logger.info("Destroying %s", self)
         self.all_functions = []
         self.all_terms = []
         self.all_vars = []
@@ -443,7 +440,7 @@ class Solver (cvc5.Solver):
             self.all_terms.append(result := super().mkTerm(*args, **kwargs))
             return result
         except Exception as ex:
-            print(f"args: {args} kwargs {kwargs}")
+            logger.info("args: %s kwargs %s", args, kwargs)
             raise ex
 
     def mkReal(self, *args, **kwargs) -> Term:
@@ -480,6 +477,7 @@ class Solver (cvc5.Solver):
     def mk_tfu_true_or_false(self) -> Term: return self.mk_tfu("true_or_false")
 
     def find_by_name(self, func_name: str) -> Function:
+        """ Look up and return a Function instance based on its name """
         for func in self.all_functions:
             if func.name == func_name:
                 return func
@@ -502,9 +500,7 @@ class Solver (cvc5.Solver):
         >>> print(normalize_ws(pprint_term(t)))
         (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
         """
-        # print(f"sexpr_str_to_term {sexpr_str}")
         sexpr = parse_sexpr_from_str(sexpr_str)
-        # print(f"sexpr {sexpr}")
         return self.sexpr_to_term(sexpr)
 
     def sexpr_to_term(self, sexpr, variables: List[Term] = None) -> Term:
@@ -574,11 +570,10 @@ class Solver (cvc5.Solver):
             try:
                 rv = self.convert_literal_to_term(sexpr, variables)
             except Exception as ex:
-                print(ex)
+                logger.error("ex: %s", ex)
                 raise Exception(f"Couldn't understand <{sexpr}>") from ex
         # logger.info("sexpr_to_term %s -> %s (%s)", sexpr, rv, rv.getKind())
         return rv
-
 
     def convert_literal_to_term(self, *args, **kwargs) -> Term:
         # logger.info("convert_literal_to_term %s", args[0])
@@ -646,7 +641,6 @@ class Solver (cvc5.Solver):
         """
         child_terms = list(child_terms)
         assert all(isinstance(x, Term) for x in child_terms)
-        # print(f"and/or {[f"{type(term)} {term}" for term in child_terms]}")
         if len(child_terms) == 0:
             rv = self.mkBoolean(True) if "and" in str(kind).lower() else \
                  self.mkBoolean(False)
@@ -654,7 +648,6 @@ class Solver (cvc5.Solver):
             rv = child_terms[0]
         else:
             rv = self.mkTerm(kind, *child_terms)
-        # print(f"and/or -> {type(rv)} {rv}")
         return rv
 
     def and_(self, *not_defined: List[Term]) -> Term:
@@ -670,59 +663,43 @@ class Solver (cvc5.Solver):
         return self._and_or(Kind.OR, *disjunct_terms)
 
     def equal(self, term1: Term, term2: Term) -> Term:
-        # print(f"equal {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.EQUAL, term1, term2)
-        # print(f"equal -> {type(rv)} {rv}")
         return rv
 
     def equal_fp(self, term1: Term, term2: Term) -> Term:
-        # print(f"equal {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_EQ, term1, term2)
-        # print(f"equal -> {type(rv)} {rv}")
         return rv
 
     def implies(self, term1: Term, term2: Term) -> Term:
-        # print(f"implies {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.IMPLIES, term1, term2)
-        # print(f"implies -> {type(rv)} {rv}")
         return rv
 
     def lt(self, term1: Term, term2: Term) -> Term:
-        # print(f"lt {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.LT, term1, term2)
-        # print(f"lt -> {type(rv)} {rv}")
         return rv
 
     def lt_fp(self, term1: Term, term2: Term) -> Term:
-        # print(f"lt {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_LT, term1, term2)
-        # print(f"lt -> {type(rv)} {rv}")
         return rv
 
     def geq(self, term1: Term, term2: Term) -> Term:
-        # print(f"geq {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.GEQ, term1, term2)
-        # print(f"geq -> {type(rv)} {rv}")
         return rv
 
     def geq_fp(self, term1: Term, term2: Term) -> Term:
-        # print(f"geq {type(term1)} {term1} {type(term2)} {term2}")
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_GEQ, term1, term2)
-        # print(f"geq -> {type(rv)} {rv}")
         return rv
 
     def not_(self, term: Term) -> Term:
         assert isinstance(term, Term)
-        # print(f"not {type(term)} {term}")
         rv = self.mkTerm(Kind.NOT, term)
-        # print(f"not -> {type(rv)} {rv}")
         return rv
 
     def forall(self,
@@ -750,11 +727,9 @@ class Solver (cvc5.Solver):
     def apply(self,
               func_const: Union[Term, Function],
               formal_args: List[Term]) -> Term:
-        # print(f"apply {func_const} formal_args {formal_args} {list(map(type, formal_args))}")
         if isinstance(func_const, Function):
             func_const = func_const.cvc5_const
         rv = self.mkTerm(Kind.APPLY_UF, func_const, *formal_args)
-        # print(f"apply -> {rv}")
         return rv
 
     def generate_all_axioms(self, facts: list):
@@ -821,10 +796,12 @@ class Solver (cvc5.Solver):
                      "E11", diagnosis_date3),
         ]
 
+
 @contextmanager
 def solver():
     tmp_solver = Solver()
     yield tmp_solver
+
 
 def show_info_about_result(s: Solver, this_result: Result):
     logger.info("checkSat -> %s", this_result)
@@ -870,7 +847,7 @@ def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
     logger.info("all axioms:")
     for axiom in axioms:
         logger.info(pprint_term(axiom, 0))
-    logger.info("====================\n")
+    logger.info("====================")
 
     if test_stmt_strs:
         test_stmts = list(map(s.sexpr_str_to_term, test_stmt_strs))
@@ -908,11 +885,11 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
     2) the cvc5.Result object for the original query
     3) the cvc5.Result object for the negated query
     """
-    logger.info(f"check_statement_validity {logical_stmt_str}")
+    logger.info("check_statement_validity %s", logical_stmt_str)
     orig_result = create_solver_and_check_sat(logical_stmt_str)
-    logger.info(f"orig_result: {orig_result}")
+    logger.info("orig_result: %s", orig_result)
     negated_result = create_solver_and_check_sat(f"(not {logical_stmt_str})")
-    logger.info(f"orig_result: {orig_result} negated_result: {negated_result}")
+    logger.info("orig_result: %s negated_result: %s", orig_result, negated_result)
     if negated_result.isUnsat():
         # we trust an unsat result more than a sat result
         rv = "true"
@@ -924,8 +901,9 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
         rv = "false"
     else:
         rv = "unknown"
-    logger.info(f"check_statement_validity {logical_stmt_str} -> {rv}")
+    logger.info("check_statement_validity %s -> %s", logical_stmt_str, rv)
     return rv, orig_result, negated_result
+
 
 def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
     logger.info("check_%s_stmt %s, pid %s:", which, logical_stmt_str, os.getpid())
@@ -951,30 +929,33 @@ def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
     p2 = Process(target=check_stmt_job, args=("negated", f"(not {logical_stmt_str})", result_q))
 
     # Start the child processes.
-    print("Parent process starting children...")
+    logger.info("Parent process starting children...")
     p1.start()
     p2.start()
-    print("Parent process waiting for the first child to finish...")
+    logger.info("Parent process waiting for the first child to finish...")
     first_result = result_q.get()
     finished_pid, which, result = first_result
-    print(f"\nParent received a result from PID {finished_pid}:\n  {first_result}")
+    logger.info("Parent received a result from PID %s:", finished_pid)
+    logger.info("  {%s}", first_result)
 
     # Determine which process finished and which one is still running.
-    print(f"Child {which} (pid {finished_pid}) finished first with result {result}")
+    logger.info("Child %s (pid %s) finished first with result %s",
+                which, finished_pid, result)
     running_process = p2 if finished_pid == p1.pid else p1
 
     # Terminate the other process if it is still active.
-    print(f"Terminating the other child process (PID: {running_process.pid})...")
+    logger.info("Terminating the other child process (PID: %s)...",
+                running_process.pid)
     if running_process.is_alive():
         running_process.terminate()
         running_process.join()  # Wait for the process to fully terminate.
-        print(f"Process {running_process.pid} has been terminated.")
+        logger.info("Process %s has been terminated", running_process.pid)
     else:
-        print(f"Process {running_process.pid} has already finished.")
+        logger.info("Process %s has already finished", running_process.pid)
 
-    print(f"finished pid {finished_pid} p1 {p1} p2{p2}")
+    logger.info("finished pid %s p1 %s p2 %s", finished_pid, p1, p2)
     if finished_pid == p2.pid:
-        print("negated solver finished first")
+        logger.info("negated solver finished first")
         if result == "unsat":
             rv = "true"
         elif result == "sat":
@@ -982,14 +963,15 @@ def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
         else:
             rv = "unknown"
     else:
-        print("orig solver finished first")
+        logger.info("orig solver finished first")
         if result == "unsat":
             rv = "false"
         elif result == "sat":
             rv = "true"
         else:
             rv = "unknown"
-    print(f"check_statement_validity_in_parallel {logical_stmt_str} -> {rv}")
+    logger.info("check_statement_validity_in_parallel %s -> {%s",
+                logical_stmt_str, rv)
     return rv
 
 # diagnosis_date1 is True
