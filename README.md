@@ -1,5 +1,5 @@
 
-[![pipeline status](https://gitlab.aws.dev/simongh/a-clinical-chatbot-with-logically-verified-responses/badges/main/pipeline.svg)](https://gitlab.aws.dev/simongh/a-clinical-chatbot-with-logically-verified-responses/-/commits/main)
+[![CodeQL](https://github.com/aws-samples/sample-clinical-chatbot-with-logically-verified-responses/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/aws-samples/sample-clinical-chatbot-with-logically-verified-responses/actions/workflows/github-code-scanning/codeql)
 
 # A clinical chatbot with logically-verified responses
 
