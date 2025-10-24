@@ -24,7 +24,6 @@ Python 3.12.3 comes pre-installed. Then, do this:
 sudo apt update
 sudo apt install python3.12-venv
 sudo apt install python3-pip
-pip3 install backend/requirements.txt
 ```
 
 
