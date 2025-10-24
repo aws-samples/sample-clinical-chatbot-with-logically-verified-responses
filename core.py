@@ -528,11 +528,11 @@ class Solver (cvc5.Solver):
         ...                     "(forall ((t Int)) (=> (> t 13180) " +
         ...                     "(not (exists ((hr FP)) (= (heart-rate t) hr))))))")
         >>> print(normalize_ws(pprint_term(t)))
-        (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
+        (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (gt t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
         """
         # print(f"sexpr_str_to_term {sexpr_str}")
         sexpr = parse_sexpr_from_str(sexpr_str)
-        print(f"sexpr {sexpr}")
+        # print(f"sexpr {sexpr}")
         return self.sexpr_to_term(sexpr)
 
     def sexpr_to_term(self, sexpr, variables: List[Term] = None) -> Term:

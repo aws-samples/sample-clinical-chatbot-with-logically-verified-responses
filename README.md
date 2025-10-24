@@ -3,6 +3,10 @@
 
 # A clinical chatbot with logically-verified responses
 
+TL;DR: watch a [demo video](assets/logically-verified-chatbot-demo.mov) or see some [screenshots](screenshots.md).
+
+---
+
 ## Motivation
 Generative AI applications have already shown promise in healthcare: they both save time and democratize access to specialized biomedical resources. In healthcare, accuracy is critical. For example, if a clinical application says that “Patient X’s most recent blood pressure was 120/80” and this statement is false, then providers and patients will rightly not trust this application and, equally rightly, will not use it.
 

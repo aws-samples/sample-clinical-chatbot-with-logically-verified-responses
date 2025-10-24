@@ -96,7 +96,7 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
 
     // Always show initial response if it exists
     if (message.initialResponse) {
-      rows.push(['Initial response', message.initialResponse]);
+      rows.push(['Raw chatbot response', message.initialResponse]);
     }
     
     // Show corrupted response if it exists and is different from initial response
@@ -109,20 +109,20 @@ const AssistantMessage: React.FC<MessageProps> = ({ message, messageIndex, total
 
     // Extracted logical statement
     if (message.extractedLogicalStmt) {
-      rows.push(['Extracted logical statement', message.extractedLogicalStmt]);
+      rows.push(['Extracted logical form', message.extractedLogicalStmt]);
     }
 
     // Results in order: Original result, Negated result, then Valid
     if (message.originalResult) {
-      rows.push(['Original result', message.originalResult]);
+      rows.push(['Theorem prover', message.originalResult]);
     }
 
     if (message.negatedResult) {
-      rows.push(['Negated result', message.negatedResult]);
+      rows.push(['Theorem prover (negated)', message.negatedResult]);
     }
 
     if (message.validationStatus) {
-      rows.push(['Valid', message.validationStatus]);
+      rows.push(['Overall validity', message.validationStatus]);
     }
 
     // Durations summary

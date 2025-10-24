@@ -1,5 +1,4 @@
 # Screenshots
-The following screenshots show how the chatbot works.
 
 When the chatbot starts, on the righthand pane contains a natural language representation of the theory that the chatbot agent will use to derive subsequent assistant's responses:
 
