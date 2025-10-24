@@ -493,10 +493,11 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_str_to_term("(= 42 43)")
         (= 42 43)
 
-        >>> t = s.sexpr_str_to_term("(and " +
-        ...                     "(= (heart-rate 13180) 60.0) " +
-        ...                     "(forall ((t Int)) (=> (> t 13180) " +
-        ...                     "(not (exists ((hr FP)) (= (heart-rate t) hr))))))")
+        >>> t = s.sexpr_str_to_term(
+        ...       "(and " +
+        ...         "(= (heart-rate 13180) 60.0) " +
+        ...            "(forall ((t Int)) (=> (> t 13180) " +
+        ...                "(not (exists ((hr FP)) (= (heart-rate t) hr))))))")
         >>> print(normalize_ws(pprint_term(t)))
         (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
         """
@@ -514,7 +515,7 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        logger.info("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
+        # logger.info("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
         # logger.debug("all_functions: %s", self.all_functions)
@@ -804,6 +805,7 @@ def solver():
 
 
 def show_info_about_result(s: Solver, this_result: Result):
+    """ After checkSat(), the solver will give us debugging info """
     logger.info("checkSat -> %s", this_result)
     # print("Getting timeout core")
     # tc_result, formulas = s.getTimeoutCore()
@@ -835,43 +837,43 @@ def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
     facts, create a subclass of Solver.
     """
     logger.info("create_solver_and_check_sat %s", test_stmt_strs)
-    s = Solver()
+    with solver() as s:
+        facts = s.generate_facts()
+        logger.info("facts:")
+        for f in facts:
+            logger.info(f.as_natural_language())
+        logger.info("====================")
 
-    facts = s.generate_facts()
-    logger.info("facts:")
-    for f in facts:
-        logger.info(f.as_natural_language())
-    logger.info("====================")
+        axioms = s.generate_all_axioms(facts)
+        logger.info("all axioms:")
+        for axiom in axioms:
+            logger.info(pprint_term(axiom, 0))
+        logger.info("====================")
 
-    axioms = s.generate_all_axioms(facts)
-    logger.info("all axioms:")
-    for axiom in axioms:
-        logger.info(pprint_term(axiom, 0))
-    logger.info("====================")
+        if test_stmt_strs:
+            test_stmts = list(map(s.sexpr_str_to_term, test_stmt_strs))
+            logger.info("Test statements:")
+            for test_stmt in test_stmts:
+                logger.info(pprint_term(test_stmt))
+            all_axioms = axioms + test_stmts
+        else:
+            all_axioms = axioms
 
-    if test_stmt_strs:
-        test_stmts = list(map(s.sexpr_str_to_term, test_stmt_strs))
-        logger.info("Test statements:")
-        for test_stmt in test_stmts:
-            logger.info(pprint_term(test_stmt))
-        all_axioms = axioms + test_stmts
-    else:
-        all_axioms = axioms
+        for stmt in all_axioms:
+            logger.info("(assert %s", pprint_term(stmt, indent=2))
+            s.assertFormula(stmt)
 
-    for stmt in all_axioms:
-        logger.info("(assert %s", pprint_term(stmt, indent=2))
-        s.assertFormula(stmt)
-
-    logger.info("checking sat")
-    this_result = s.checkSat()
-    show_info_about_result(s, this_result)
-    logger.info("create_solver_and_check_sat %s -> %s", test_stmt_strs, this_result)
-    # Python seems not to be GCing `all_functions` correctly.
-    # this line prevents a SEGFAULT:
-    s.all_functions = None
-    s.all_vars = None
-    s.all_terms = None
-    logger.info("Cleared out all_functions, vars, and terms")
+        logger.info("checking sat")
+        this_result = s.checkSat()
+        show_info_about_result(s, this_result)
+        logger.info("create_solver_and_check_sat %s -> %s",
+                    test_stmt_strs, this_result)
+        # Python seems not to be GCing `all_functions` correctly.
+        # this line prevents a SEGFAULT:
+        s.all_functions = None
+        s.all_vars = None
+        s.all_terms = None
+        logger.info("Cleared out all_functions, vars, and terms")
     return this_result
 
 def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result]:
@@ -906,6 +908,7 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
 
 
 def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
+    """ When doing parallel validity checks, this is the job """
     logger.info("check_%s_stmt %s, pid %s:", which, logical_stmt_str, os.getpid())
     try:
         result = create_solver_and_check_sat(logical_stmt_str)
@@ -1049,6 +1052,7 @@ def test_solver_segfault():
 
 
 def test_age():
+    """ Can we do equality check on age relation """
     valid, _, _ = check_statement_validity("(= age 75.86027397260274)")
     assert valid == "true"
     # truncated should be false (we need a better solution here)
@@ -1057,6 +1061,7 @@ def test_age():
 
 
 def test_name_eq_1():
+    """ Check that name works properly """
     valid = create_solver_and_check_sat('(= name "Joe Bloggs")')
     assert not valid.isUnsat(), valid
     valid = create_solver_and_check_sat('(not (= name "Joe Bloggs"))')
@@ -1064,6 +1069,7 @@ def test_name_eq_1():
 
 
 def test_name_eq_2():
+    """ Check that name works properly """
     valid = create_solver_and_check_sat('(= name "John Smith")')
     assert valid.isUnsat(), valid
     valid = create_solver_and_check_sat('(not (= name "John Smith"))')
@@ -1083,11 +1089,13 @@ def test_fp_gt():
 
 
 def test_heart_rate_existential():
+    """ The body should never be true """
     valid, _, _ = check_statement_validity("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
     assert valid == "false", valid
 
 
 def test_heart_rate_existential_2():
+    """ Same """
     valid = create_solver_and_check_sat(dedent("""\
         (exists ((time Int))
           (and (not (fp= (heart-rate time) NaN))
@@ -1102,7 +1110,7 @@ def test_heart_rate_existential_3():
     assert not valid.isUnsat(), valid
 
 
-def test_NaN_eq_NaN():
+def test_nan_eq_nan():
     """ Comparison against NaN only works for =, not for fp= """
     valid = create_solver_and_check_sat("(= NaN NaN)")
     assert not valid.isUnsat(), valid
@@ -1110,7 +1118,7 @@ def test_NaN_eq_NaN():
     assert valid.isUnsat(), valid
 
 
-def test_NaNs():
+def test_nans():
     valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
                                         "(fp= (heart-rate 12815) NaN)")
     assert not valid.isSat(), valid
@@ -1120,7 +1128,7 @@ def test_NaNs():
     assert not valid.isUnsat(), valid
 
 
-def test_NaN_universal():
+def test_nan_universal():
     valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
                                         "(forall ((t Int)) (fp= (heart-rate t) NaN))")
     assert valid.isUnsat(), valid
@@ -1193,5 +1201,5 @@ if __name__ == "__main__":
     #     t = s.sexpr_str_to_term(sexpr)
     #     print(f"term: {t}")
     #     print(f"pprint: {pprint_term(t, indent=8)}")
-    print("Finished")
+    logger.info("Finished")
  
