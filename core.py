@@ -528,7 +528,7 @@ class Solver (cvc5.Solver):
         ...                     "(forall ((t Int)) (=> (> t 13180) " +
         ...                     "(not (exists ((hr FP)) (= (heart-rate t) hr))))))")
         >>> print(normalize_ws(pprint_term(t)))
-        (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (gt t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
+        (and (= (heart-rate 13180) 60.0) (forall ((t Int)) (=> (> t 13180) (not (exists ((hr FP)) (= (heart-rate t) hr))))))
         """
         # print(f"sexpr_str_to_term {sexpr_str}")
         sexpr = parse_sexpr_from_str(sexpr_str)
@@ -546,7 +546,7 @@ class Solver (cvc5.Solver):
         >>> s.sexpr_to_term(["=", 42, 43])
         (= 42 43)
         """
-        # logger.info("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
+        logger.info("sexpr_to_term %s %s vars %s", sexpr, type(sexpr), variables)
         if variables is None:
             variables = []
         # logger.debug("all_functions: %s", self.all_functions)
@@ -623,7 +623,7 @@ class Solver (cvc5.Solver):
         """
         if variables is None:
             variables = []
-        logger.info(f"_convert_literal_to_term {x} {type(x)} vars {' '.join([str(v) for v in variables])} known_sort {known_sort}")
+        # logger.info(f"_convert_literal_to_term {x} {type(x)} vars {' '.join([str(v) for v in variables])} known_sort {known_sort}")
         if variables is None:
             variables = []
         if isinstance(x, str) and x == "tfu_true":
@@ -647,8 +647,6 @@ class Solver (cvc5.Solver):
         if known_sort:
             if known_sort.isInteger():
                 return self.mkInteger(int(x))
-            # elif known_sort.isReal():
-            #     return self.mkReal(float(x))
             elif known_sort == self.fp64_sort:
                 return self.mkFp64(float(x))
             elif known_sort.isString():
@@ -663,12 +661,12 @@ class Solver (cvc5.Solver):
             # cvc5 is finicky about types, so preferentially cast to float
             try:
                 return self.mkFp64(float(x)) if "." in str(x) else self.mkInteger(int(x))
-            except:
+            except Exception as ex:
                 try:
                     return self.mkString(str(x))
-                except:
-                    pass
-            raise Exception(f"_convert_literal_to_term: port me! {type(x)} {x}")
+                except Exception as ex2:
+                    raise Exception(f"_convert_literal_to_term: port me! {type(x)} {x}") 
+
 
     def _and_or(self, kind: Kind, *child_terms: List[Term]) -> Term:
         """
@@ -1060,9 +1058,9 @@ def test_diagnosis():
         ]):
         print(">>>", date_, value, expected_validity)
         test_stmt = f'(= (D "E11" {date_}) {value})'
-        valid = check_statement_validity(test_stmt)
-        print(f"#{idx:,}: valid: {valid}")
-        assert valid == expected_validity, (date_, value, expected_validity)
+        is_valid = check_statement_validity(test_stmt)
+        print(f"#{idx:,}: valid: {is_valid}")
+        assert is_valid == expected_validity, (date_, value, expected_validity)
 
 
 def test_sexpr_str_to_term():
@@ -1077,7 +1075,7 @@ def test_sexpr_str_to_term():
                             (and (not (= hr NaN))
                                  (= (heart-rate t) hr))
                          )))))"""), None),
-        ("(= age 72)", "(= age 72.0)")]:
+        ("(= age 72.0)", "(= age 72.0)")]:
         term = s.sexpr_str_to_term(sexpr_str)
         print(f"term: {term}")
         term_str = normalize_ws(pprint_term(term))
