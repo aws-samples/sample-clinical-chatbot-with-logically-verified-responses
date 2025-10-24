@@ -3,7 +3,6 @@ Simplified interface module that works without strands dependency.
 This provides basic functionality for get_facts_nat_lang() without AI agent features.
 """
 
-import datetime
 import logging
 from typing import List, Optional
 
@@ -12,13 +11,11 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('..'))
 
-from utils import Timer, NEWLINE
-from core import (solver, convert_epochal_to_str, convert_date_to_epochal)
+from utils import NEWLINE
+from core import solver
 
-logging.basicConfig(
-    format="%(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler()]
-)
+logger = logging.getLogger("interface_simple")
+logger.setLevel(logging.INFO)
 
 FACTS_NAT_LANG: Optional[List[str]] = None
 
@@ -32,9 +29,11 @@ def get_facts_nat_lang() -> List[str]:
         try:
             with solver() as s:
                 FACTS_NAT_LANG = s.convert_facts_to_natural_language(s.generate_facts())
-            print(f"FACTS_NAT_LANG:\n{NEWLINE.join(FACTS_NAT_LANG)}\n===========")
+            logger.info("FACTS_NAT_LANG:")
+            logger.info(NEWLINE.join(FACTS_NAT_LANG))
+            logger.info("===========")
         except Exception as e:
-            logging.error(f"Error generating facts from theorem prover: {e}")
+            logging.error("Error generating facts from theorem prover: %s", e)
             # Fallback to sample data if theorem prover fails
             FACTS_NAT_LANG = [
                 "The patient's name is Joe Bloggs",
@@ -69,6 +68,6 @@ def process_user_response_simple(user_response: str) -> dict:
 if __name__ == "__main__":
     # Test the simplified interface
     facts = get_facts_nat_lang()
-    print(f"Retrieved {len(facts)} facts:")
+    logger.info("Retrieved %s facts:", len(facts))
     for i, fact in enumerate(facts, 1):
-        print(f"{i}. {fact}")
+        logger.info("%d. %s", i, fact)

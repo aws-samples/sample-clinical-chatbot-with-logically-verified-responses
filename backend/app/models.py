@@ -4,7 +4,6 @@ Pydantic models for API request/response validation
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
-from datetime import datetime
 
 class ChatRequest(BaseModel):
     """Request model for chat messages"""

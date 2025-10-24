@@ -112,7 +112,7 @@ class Function:
                 return value
         if self.name == "D":
             icd_, time_ = fact.args
-            maybe_not = "not " if fact.result == self.solver.mk_tfu_false() else ""
+            maybe_not = "not " if fact.result == s.mk_tfu_false() else ""
             return f"The patient was diagnosed as {maybe_not}having {icd_}"\
                    f" on {convert_epochal_to_str(time_)}"
         elif len(self.args) > 0:
@@ -143,12 +143,15 @@ class Function:
         """
         facts is of type List[Fact]
         """
+        logger.info("generate_core_axioms %s %s", self, facts)
         relevant_facts = [fact for fact in facts if self == fact.function]
+        logger.info("relevant_facts, %s", relevant_facts)
         results = []
         s = self.solver
         for fact in relevant_facts:
-            # print(f"fact.args {fact.args} fact.result {fact.result}")
+            logger.info("fact.args %s fact.result %s", fact.args, fact.result)
             if fact.function.name == "D":
+                # these are implicit in the CWA axioms
                 continue
             arg_value_terms = [s.convert_literal_to_term(arg, known_sort=sort)
                                   for arg, sort in zip(fact.args, self.arg_sorts)]
@@ -161,7 +164,7 @@ class Function:
                     axiom = s.not_(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
                                            else self.cvc5_const)
             else:
-                logger.info("args {self.args}")
+                logger.info("args %s", self.args)
                 logger.info("arg_value_terms %s", arg_value_terms)
                 logger.info("results_term %s", results_term)
                 logger.info("results_term sort %s", results_term.getSort())
@@ -630,11 +633,11 @@ class Solver (cvc5.Solver):
             # cvc5 is finicky about types, so preferentially cast to float
             try:
                 return self.mkFp64(float(x)) if "." in str(x) else self.mkInteger(int(x))
-            except Exception as ex:
+            except Exception:
                 try:
                     return self.mkString(str(x))
                 except Exception as ex2:
-                    raise Exception(f"_convert_literal_to_term: port me! {type(x)} {x}") 
+                    raise Exception(f"_convert_literal_to_term: port me! {type(x)} {x}") from ex2
 
 
     def _and_or(self, kind: Kind, *child_terms: List[Term]) -> Term:
@@ -885,7 +888,7 @@ def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
     logger.info("checking sat")
     this_result = s.checkSat()
     show_info_about_result(s, this_result)
-    logger.info(f"create_solver_and_check_sat {test_stmt_strs} -> {this_result}")
+    logger.info("create_solver_and_check_sat %s -> %s", test_stmt_strs, this_result)
     # Python seems not to be GCing `all_functions` correctly.
     # this line prevents a SEGFAULT:
     s.all_functions = None
@@ -925,10 +928,10 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
     return rv, orig_result, negated_result
 
 def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
-    logger.info(f"check_{which}_stmt {logical_stmt_str}, pid {os.getpid()}: ")
+    logger.info("check_%s_stmt %s, pid %s:", which, logical_stmt_str, os.getpid())
     try:
         result = create_solver_and_check_sat(logical_stmt_str)
-        logger.info(f"{which}>result: {result}")
+        logger.info("%s>result: %s", which, result)
         queue.put((os.getpid(), which, str(result).lower())) # result isn't pickleable
         logger.info("added to q")
     except Exception as ex:
@@ -999,8 +1002,10 @@ logger.debug("delta %s", delta)
 
 def test_diagnosis():
     """
-    There is one diagnosis of True on diagnosis_date1
-    And another of False on diagnosis_date2
+    There is one diagnosis of
+        - True on diagnosis_date1
+        - False on diagnosis_date2
+        - True on diagnosis_date3
     """
     for idx, (date_, value, expected_validity) in enumerate([
         (diagnosis_date1 - delta, "tfu_true",          "false"),
@@ -1027,113 +1032,139 @@ def test_diagnosis():
         ]):
         print(">>>", date_, value, expected_validity)
         test_stmt = f'(= (D "E11" {date_}) {value})'
-        is_valid = check_statement_validity(test_stmt)
+        is_valid, _, _ = check_statement_validity(test_stmt)
         print(f"#{idx:,}: valid: {is_valid}")
-        assert is_valid == expected_validity, (date_, value, expected_validity)
+        assert is_valid == expected_validity, (idx, date_, value, expected_validity)
 
 
 def test_sexpr_str_to_term():
-    s = Solver()
-    _facts = s.generate_facts() # as a side-effect, generate Functions
-    for sexpr_str, expected in [(dedent("""\
-        (and
-            (= (heart-rate 13180) 60.0)
-            (forall ((t Int))
-                (=> (> t 13180)
-                    (not (exists ((hr FP))
-                            (and (not (= hr NaN))
-                                 (= (heart-rate t) hr))
-                         )))))"""), None),
-        ("(= age 72.0)", "(= age 72.0)")]:
-        term = s.sexpr_str_to_term(sexpr_str)
-        print(f"term: {term}")
-        term_str = normalize_ws(pprint_term(term))
-        sexpr_str = normalize_ws(sexpr_str)
-        expected = expected or sexpr_str
-        print(f"Got:      {term_str}")
-        print(f"Expected: {expected}")
-        assert str(term_str) == expected
-
-    s.all_functions = None
-    s.all_terms = None
+    with solver() as s:
+        _ = s.generate_facts() # as a side-effect, generate Functions
+        for sexpr_str, expected in [(dedent("""\
+            (and
+                (= (heart-rate 13180) 60.0)
+                (forall ((t Int))
+                    (=> (> t 13180)
+                        (not (exists ((hr FP))
+                                (and (not (= hr NaN))
+                                    (= (heart-rate t) hr))
+                            )))))"""), None),
+            ("(= age 72.0)", "(= age 72.0)")]:
+            term = s.sexpr_str_to_term(sexpr_str)
+            print(f"term: {term}")
+            term_str = normalize_ws(pprint_term(term))
+            sexpr_str = normalize_ws(sexpr_str)
+            expected = expected or sexpr_str
+            print(f"Got:      {term_str}")
+            print(f"Expected: {expected}")
+            assert str(term_str) == expected
 
 
 def test_solver_segfault():
     """ Call this multiple times to see if we can get a SEGFAULT. """
-    result = check_statement_validity("(> age 40.0)")
-    print(result)
+    valid, _, _ = check_statement_validity("(fp> age 40.0)")
+    assert valid == "true"
+
+
+def test_age():
+    valid, _, _ = check_statement_validity("(= age 75.86027397260274)")
+    assert valid == "true"
+    # truncated should be false (we need a better solution here)
+    valid, _, _ = check_statement_validity("(= age 75.8547945)")
+    assert valid == "false"
+
+
+def test_name_eq_1():
+    valid = create_solver_and_check_sat('(= name "Joe Bloggs")')
+    assert not valid.isUnsat(), valid
+    valid = create_solver_and_check_sat('(not (= name "Joe Bloggs"))')
+    assert valid.isUnsat(), valid
+
+
+def test_name_eq_2():
+    valid = create_solver_and_check_sat('(= name "John Smith")')
+    assert valid.isUnsat(), valid
+    valid = create_solver_and_check_sat('(not (= name "John Smith"))')
+    assert not valid.isUnsat(), valid
+
+
+def test_fp_lt():
+    """ Make sure < is working on fp64s. """
+    valid, _, _ = check_statement_validity("(fp< 150.0 100.0)")
+    assert valid == "false"
+
+
+def test_fp_gt():
+    """ Make sure > is working on fp64s. """
+    valid, _, _ = check_statement_validity("(fp> 150.0 100.0)")
+    assert valid == "true"
+
+
+def test_heart_rate_existential():
+    valid, _, _ = check_statement_validity("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
+    assert valid == "false", valid
+
+
+def test_heart_rate_existential_2():
+    valid = create_solver_and_check_sat(dedent("""\
+        (exists ((time Int))
+          (and (not (fp= (heart-rate time) NaN))
+               (fp> (heart-rate time) 100.0)))"""))
+    assert valid.isUnsat(), valid
+
+
+def test_heart_rate_existential_3():
+    valid = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
+    assert valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
+    assert not valid.isUnsat(), valid
+
+
+def test_NaN_eq_NaN():
+    """ Comparison against NaN only works for =, not for fp= """
+    valid = create_solver_and_check_sat("(= NaN NaN)")
+    assert not valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(not (= NaN NaN))")
+    assert valid.isUnsat(), valid
+
+
+def test_NaNs():
+    valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
+                                        "(fp= (heart-rate 12815) NaN)")
+    assert not valid.isSat(), valid
+    valid = create_solver_and_check_sat(dedent("""\
+        (not (and (fp= (heart-rate 12815) 55.0)
+             (fp= (heart-rate 12815) NaN)))"""))
+    assert not valid.isUnsat(), valid
+
+
+def test_NaN_universal():
+    valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
+                                        "(forall ((t Int)) (fp= (heart-rate t) NaN))")
+    assert valid.isUnsat(), valid
+
+
+def test_unknown_heart_rate():
+    """ Make sure that unknown heart rates are NaN. """
+    valid = create_solver_and_check_sat("(= (heart-rate 42) NaN)")
+    assert not valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(not (= (heart-rate 42) NaN))")
+    assert not valid.isSat(), valid
+
+
+def test_fp64_correctness():
+    """ Make sure that we're converting float literals into fp64 correctly """
+    valid = create_solver_and_check_sat("(fp< (heart-rate 12815) 100.0)") # Sat
+    assert not valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(fp> (heart-rate 12815) 100.0)") # Unsat
+    assert valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(fp< (heart-rate 12815) 10.0)") # Unsat
+    assert valid.isUnsat(), valid
+    valid = create_solver_and_check_sat("(fp> (heart-rate 12815) 10.0)") # Sat
+    assert not valid.isUnsat(), valid
 
 
 if __name__ == "__main__":
-    # valid = check_statement_validity("(= age 75.8547945)")
-    # valid = check_statement_validity("(= age 75.8547945)")
-    # valid = check_statement_validity("(exists ((time Int)) (> (heart-rate time) 100.0))")
-
-    # valid = create_solver_and_check_sat("(exists ((time Int)) (and (not (= (heart-rate time) NaN)) (> (heart-rate time) 100.0)))")
-    # assert valid.isUnsat(), valid
-
-    valid = create_solver_and_check_sat("(= name \"John Smith\")")
-    assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(not (= name \"John Smith\"))")
-    # assert valid.isSat(), valid
-    # valid = create_solver_and_check_sat("(= name \"John Smith\")")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(= NaN NaN)")
-    # assert valid.isSat(), valid
-
-    # valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)", "(fp= (heart-rate 12815) NaN)")
-    # assert valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(not (and (fp= (heart-rate 12815) 55.0) (fp= (heart-rate 12815) NaN)))")
-    # assert valid.isSat(), valid
-    # valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
-                                        # "(forall ((t Int)) (fp= (heart-rate t) NaN))")
-    # assert valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(not (fp= (heart-rate 12815) 55.0))",
-    #                                     # "(forall ((t Int)) (fp= (heart-rate t) NaN) :pattern ((heart-rate t)))"
-    #                                     )
-    # assert not valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(= (heart-rate 42) NaN)")
-    # assert not valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(not (= (heart-rate 42) NaN))")
-    # assert not valid.isSat(), valid
-    
-    # valid = create_solver_and_check_sat("(not (fp= (heart-rate 42) NaN))")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
-    # assert valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
-    # assert not valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (< (heart-rate time) 100.0)))")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(not (exists ((time Int)) (> (heart-rate time) 10.0)))")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(exists ((time Int)) (< (heart-rate time) 10.0))")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 100.0)")
-    # assert valid.isUnsat(), valid
-
-    # valid = create_solver_and_check_sat("(> (heart-rate 12816) 100.0)")
-    # assert valid.isUnsat(), valid
-
-    # valid = check_statement_validity("(> 150.0 100.0)")
-
-    # valid = create_solver_and_check_sat("(< (heart-rate 12815) 100.0)") # Sat
-    # assert valid.isSat(), valid
-    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 100.0)") # Unsat
-    # assert valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(< (heart-rate 12815) 10.0)") # Unsat
-    # assert valid.isUnsat(), valid
-    # valid = create_solver_and_check_sat("(> (heart-rate 12815) 10.0)") # Sat
-    # assert valid.isSat(), valid
-
     # with solver() as s:
     #     X = s.mkConst(s.fp64_sort, "X")
     #     s.assertFormula(s.equal(X, double_to_fp64(s, 42.0)))

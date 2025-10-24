@@ -16,11 +16,13 @@ from utils import Timer, extract_result, NEWLINE
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal,
                   check_statement_validity, pprint_term)
 
-logging.getLogger("interface").setLevel(logging.DEBUG)
-logging.basicConfig(
-    format="%(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler()],
-    level=logging.DEBUG)
+logger = logging.getLogger("interface")
+logger.setLevel(logging.INFO)
+
+# logging.basicConfig(
+#     format="%(levelname)s | %(name)s | %(message)s",
+#     handlers=[logging.StreamHandler()],
+#     level=logging.DEBUG)
 
 # Configure Strands agents logging
 logging.getLogger("strands").setLevel(logging.DEBUG)
@@ -34,16 +36,14 @@ logging.getLogger("botocore").setLevel(logging.INFO)
 logging.getLogger("anthropic").setLevel(logging.DEBUG)
 logging.getLogger("httpx").setLevel(logging.INFO)  # Keep HTTP requests at INFO to avoid spam
 
-logging.info("Testing logging")
 extraction_model_id = "global.anthropic.claude-sonnet-4-20250514-v1:0"
 # extraction_model_id = "anthropic.claude-opus-4-1-20250805-v1:0"
 # extraction_model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 chatbot_model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 corruption_model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
-
-
 FACTS_NAT_LANG: Optional[List[str]] = None
 AXIOMS_AS_STR: Optional[List[str]] = None
+
 
 def get_facts_nat_lang() -> List[str]:
     """
@@ -56,6 +56,7 @@ def get_facts_nat_lang() -> List[str]:
             FACTS_NAT_LANG = s.convert_facts_to_natural_language(s.generate_facts())
         print(f"FACTS_NAT_LANG:\n{NEWLINE.join(FACTS_NAT_LANG)}\n===========")
     return FACTS_NAT_LANG
+
 
 def get_axioms_as_str() -> List[str]:
     """
@@ -72,8 +73,10 @@ def get_axioms_as_str() -> List[str]:
         print(f"AXIOMS_AS_STR:\n{NEWLINE.join(AXIOMS_AS_STR)}\n===========")
     return AXIOMS_AS_STR
 
+
 TODAY = convert_epochal_to_str(int(datetime.datetime.now().timestamp()/
                                    (60 * 60 * 24)))
+
 
 @tool
 def convert_date_to_epochal_tool(date_string: str) -> int:
@@ -81,8 +84,9 @@ def convert_date_to_epochal_tool(date_string: str) -> int:
     Given a date, like '2002-10-05', convert it into an integer
     which is the number of _days_ from the Unix epoch start.
     """
-    logging.info("in convert_date_to_epochal_tool")
+    logger.info("in convert_date_to_epochal_tool")
     return convert_date_to_epochal(date_string)
+
 
 def extract_logical_statement(nat_lang_statement: str) -> str:
     """
@@ -93,12 +97,12 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
     this_system_prompt = dedent("""\
         You are an expert at first-order logic.
         """)
-    logging.info("Creating extraction agent with model: %s", extraction_model_id)
+    logger.info("Creating extraction agent with model: %s", extraction_model_id)
     this_agent = Agent(system_prompt=this_system_prompt,
                        model=extraction_model_id,
                        tools=[convert_date_to_epochal_tool])
-    logging.info("Extraction agent created successfully")
-    logging.info("model config: %s", this_agent.model.config)
+    logger.info("Extraction agent created successfully")
+    logger.info("model config: %s", this_agent.model.config)
     prompt = dedent(f"""\
         Your task is to convert a natural language statement into a first-order logical well-formed formula.
         You have available the following functions:
@@ -164,18 +168,18 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
 
         ```{nat_lang_statement}```
         """)
-    logging.info("Calling extraction agent with prompt length: %d", len(prompt))
+    logger.info("Calling extraction agent with prompt length: %d", len(prompt))
     this_response = this_agent(prompt=prompt)
-    logging.info("this_agent has %d messages", len(this_agent.messages))
+    logger.info("this_agent has %d messages", len(this_agent.messages))
     for message in this_agent.messages:
-        logging.info(">> message %s", message)
+        logger.info(">> message %s", message)
         if message.get("role") == "assistant" and "tool_calls" in message.get("content", []):
-            logging.info("Tool call detected:")
+            logger.info("Tool call detected:")
             for tool_call in message["content"]["tool_calls"]:
-                logging.info("  Tool Name: %s", tool_call['function']['name'])
-                logging.info("  Arguments: %s", tool_call['function']['arguments'])
-    logging.info("Extraction agent response received, length: %d", len(str(this_response)))
-    logging.info("response: %s", str(this_response))
+                logger.info("  Tool Name: %s", tool_call['function']['name'])
+                logger.info("  Arguments: %s", tool_call['function']['arguments'])
+    logger.info("Extraction agent response received, length: %d", len(str(this_response)))
+    logger.info("response: %s", str(this_response))
     return extract_result(str(this_response))
 
 chatbot_system_prompt = dedent(f"""\
@@ -192,17 +196,17 @@ chatbot_system_prompt = dedent(f"""\
     """)
 print(f"Chatbot system prompt:\n{chatbot_system_prompt}\n===========")
 
-logging.info("Creating chatbot agent with model: %s", chatbot_model_id)
+logger.info("Creating chatbot agent with model: %s", chatbot_model_id)
 chatbot_agent = Agent(model=chatbot_model_id, system_prompt=chatbot_system_prompt)
-logging.info("Chatbot agent created successfully")
-print(chatbot_agent.model.config)
+logger.info("Chatbot agent created successfully")
+logger.info(chatbot_agent.model.config)
 
 def corrupt_response(first_response: str) -> str:
     """ Change the response slightly to mimic a mistake from the chatbot LLM. """
-    print(f"corrupt_response {first_response}")
-    logging.info("Creating corruption agent with model: %s", corruption_model_id)
+    logger.info("corrupt_response %s", first_response)
+    logger.info("Creating corruption agent with model: %s", corruption_model_id)
     this_agent = Agent(model=corruption_model_id)
-    logging.info("Corruption agent created successfully")
+    logger.info("Corruption agent created successfully")
     prompt = dedent(f"""\
         Your task is to change a sentence slightly so that the meaning is different.
         For example, if you were given the sentence "The patient is 10 years old"
@@ -216,14 +220,15 @@ def corrupt_response(first_response: str) -> str:
 
         You must enclose your response in XML tags: <result>...</result>
         """)
-    logging.info("Calling corruption agent with prompt length: %d", len(prompt))
+    logger.info("Calling corruption agent with prompt length: %d", len(prompt))
     this_response = this_agent(prompt=prompt)
-    logging.info("Corruption agent response received, length: %d", len(str(this_response)))
+    logger.info("Corruption agent response received, length: %d", len(str(this_response)))
     result = str(this_response)
-    print(f"Raw result: {result}")
+    logger.info("Raw result: %s", result)
     result = extract_result(result)
-    print(f"\nCorruption: {first_response.strip()} -> {result}")
+    logger.info("Corruption: %s -> %s", first_response.strip(), result)
     return result
+
 
 class Event:
     """
@@ -232,7 +237,7 @@ class Event:
     the `ProgressUpdate` sub-class) and the other is to summarize the
     result at the end (this is the `FinalSummary` event).
     """
-    pass
+
 
 @dataclasses.dataclass
 class FinalSummary (Event):
@@ -250,6 +255,7 @@ class FinalSummary (Event):
     error_messages: Optional[List[str]] = None
     extra_delay: Optional[float] = None # seconds
 
+
 @dataclasses.dataclass
 class ProgressUpdate (Event):
     """
@@ -259,7 +265,7 @@ class ProgressUpdate (Event):
     message: str
 
     def __init__(self, message: str):
-        print(f"New progress update: {message}")
+        logger.info("New progress update: %s", message)
         self.message = message
 
 def process_user_response_streaming(
@@ -269,7 +275,7 @@ def process_user_response_streaming(
     This is a generator function, that streams a series of `response` instances
     that indicate the progress.
     """
-    logging.info(f"process_user_response_streaming {user_response} {do_corrupt}")
+    logger.info("process_user_response_streaming %s %s", user_response, do_corrupt)
     assistant_response: Optional[str] = None
     corrupted_response: Optional[str] = None
     valid: Optional[str] = None
@@ -284,9 +290,9 @@ def process_user_response_streaming(
 
         llm_timer = Timer("LLM")
         with llm_timer:
-            logging.info("Calling chatbot agent with user response: %s", user_response[:100] + "..." if len(user_response) > 100 else user_response)
+            logger.info("Calling chatbot agent with user response: %s", user_response[:100] + "..." if len(user_response) > 100 else user_response)
             assistant_response = chatbot_agent(user_response)
-            logging.info("Chatbot agent response received, length: %d", len(str(assistant_response)))
+            logger.info("Chatbot agent response received, length: %d", len(str(assistant_response)))
             assistant_response = str(assistant_response).strip()
         yield ProgressUpdate(f"Initial response: {assistant_response}")
 
@@ -303,13 +309,11 @@ def process_user_response_streaming(
         extract_timer = Timer("Extraction")
         with extract_timer:
             try:
-                logging.info("in here")
+                logger.info("in here")
                 extracted_logical_stmt = extract_logical_statement(corrupted_response or assistant_response)
-                logging.info("extracted_logical_stmt: %s", extracted_logical_stmt)
+                logger.info("extracted_logical_stmt: %s", extracted_logical_stmt)
                 if "unable to extract" in extracted_logical_stmt:
                     extracted_logical_stmt = None
-                # extracted_logical_stmt = pprint_term(self.sexpr_str_to_term(extracted_logical_stmt))
-                # logging.info("extracted_logical_stmt: %s", extracted_logical_stmt)
             except Exception as ex:
                 logging.error("Caught in extract_timer: %s", str(ex), exc_info=ex, stack_info=True)
                 extracted_logical_stmt = None
@@ -326,12 +330,11 @@ def process_user_response_streaming(
                     except Exception as ex:
                         logging.error("Caught in theorem prover: %s", str(ex), exc_info=ex, stack_info=True)
                         valid = "unknown"
-                print(f"valid: {valid}")
+                logger.info("valid: %s", valid)
                 yield ProgressUpdate(f"Validity: {valid} original {original_result} negated {negated_result}")
         except Exception as ex:
             logging.error("Caught: %s", str(ex), exc_info=ex, stack_info=True)
         
-        # Always create timers dict and durations, regardless of success/failure
         timers = {
             "agent": llm_timer,
             "theorem prover": tp_timer,
@@ -342,10 +345,11 @@ def process_user_response_streaming(
         durations = {name: timer.duration
                         for name, timer in timers.items()
                         if timer is not None}
-        print(f"durations {durations}")
+        logger.info("durations %s", durations)
     
     except Exception as ex:
-        logging.error("ERROR in process_user_response_streaming: %s", str(ex), exc_info=ex, stack_info=True)
+        logging.error("ERROR in process_user_response_streaming: %s",
+                      str(ex), exc_info=ex, stack_info=True)
         error_messages.append(str(ex))
     yield FinalSummary(durations=durations,
                        assistant_response=assistant_response,
@@ -357,6 +361,7 @@ def process_user_response_streaming(
                        error_messages=error_messages,
                        extra_delay=5.0)
 
+
 def process_user_response(
     user_response: str,
     do_corrupt: bool=True) -> FinalSummary:
@@ -366,11 +371,12 @@ def process_user_response(
     """
     last_event = None
     for event in process_user_response_streaming(user_response, do_corrupt):
-        print("Got event:")
+        logger.info("Got event:")
         rich.print(event)
         last_event = event
     assert isinstance(last_event, FinalSummary)
     return last_event
+
 
 if __name__ == "__main__":
     # user_response = "Is the patient more than 10 years old?"
@@ -379,4 +385,4 @@ if __name__ == "__main__":
     test_user_resp = "Has the patient's heart rate ever been below 50?"
     response = process_user_response(test_user_resp, do_corrupt=False)
     rich.print(response)
-    print("Finished")
+    logger.info("Finished")
