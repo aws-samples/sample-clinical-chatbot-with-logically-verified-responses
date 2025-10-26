@@ -11,10 +11,12 @@ import rich
 
 from cvc5 import Result
 from strands import Agent, tool
+import botocore
 
 from utils import Timer, extract_result, NEWLINE
 from core import (solver, convert_epochal_to_str, convert_date_to_epochal,
-                  check_statement_validity, pprint_term)
+                  check_statement_validity, pprint_term,
+                  diagnosis_date1, diagnosis_date2, diagnosis_date3, delta)
 
 logger = logging.getLogger("interface")
 logger.setLevel(logging.INFO)
@@ -376,6 +378,62 @@ def process_user_response(
         last_event = event
     assert isinstance(last_event, FinalSummary)
     return last_event
+
+
+def test_diagnosis_2():
+    """
+    There is one diagnosis of
+        - True on diagnosis_date1
+        - False on diagnosis_date2
+        - True on diagnosis_date3
+    """
+    try:
+        for idx, (date_, form_template, expected_validity) in enumerate([
+            (diagnosis_date1-delta, "The patient's diabetes status on {date} is unknown", "true"),
+            (diagnosis_date1-delta, "The patient had diabetes on {date}",     "false"),
+            (diagnosis_date1-delta, "The patient did not have diabetes on {date}",     "false"),
+
+            (diagnosis_date1, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date1, "The patient had diabetes on {date}",     "true"),
+            (diagnosis_date1, "The patient did not have diabetes on {date}",     "false"),
+
+            (diagnosis_date1+delta, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date1+delta, "The patient had diabetes on {date}",     "true"),
+            (diagnosis_date1+delta, "The patient did not have diabetes on {date}",     "false"),
+
+            (diagnosis_date2, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date2, "The patient had diabetes on {date}",     "false"),
+            (diagnosis_date2, "The patient did not have diabetes on {date}",     "true"),
+
+            (diagnosis_date2+delta, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date2+delta, "The patient had diabetes on {date}",                 "false"),
+            (diagnosis_date2+delta, "The patient did not have diabetes on {date}",         "true"),
+
+            (diagnosis_date3, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date3, "The patient had diabetes on {date}",                 "true"),
+            (diagnosis_date3, "The patient did not have diabetes on {date}",        "false"),
+
+            (diagnosis_date3+delta, "The patient's diabetes status on {date} is unknown", "false"),
+            (diagnosis_date3+delta, "The patient had diabetes on {date}",                 "false"),
+            (diagnosis_date3+delta, "The patient did not have diabetes on {date}",         "true"),
+            ]):
+            print(">>>", date_, form_template, expected_validity)
+            form = form_template.format(date=date_)
+            extracted_logical_stmt = extract_logical_statement(form)
+            is_valid, _, _ = check_statement_validity(extracted_logical_stmt)
+            print(f"#{idx:,}: valid: {is_valid}")
+            assert is_valid == expected_validity, (idx, date_, form, expected_validity)
+    except botocore.exceptions.ConnectionClosedError as ex:
+        pass
+    except Exception as ex:
+        print(f"foofoofoo {str(ex)}")
+        if "botocore.exceptions.ConnectionClosedError" in str(ex):
+            # Silently skip these tests because we are not currently authenticated
+            # with the AWS cloud so we can't run LLMs. This happens, for example, when
+            # the tests are run on Github
+            pass
+        else:
+            raise ex
 
 
 if __name__ == "__main__":

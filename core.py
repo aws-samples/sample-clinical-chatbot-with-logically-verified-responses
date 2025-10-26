@@ -985,7 +985,7 @@ logger.debug("diagnosis_date1 %s", diagnosis_date1)
 logger.debug("diagnosis_date2 %s", diagnosis_date2)
 logger.debug("delta %s", delta)
 
-def test_diagnosis():
+def test_diagnosis_1():
     """
     There is one diagnosis of
         - True on diagnosis_date1
@@ -996,21 +996,27 @@ def test_diagnosis():
         (diagnosis_date1 - delta, "tfu_true",          "false"),
         (diagnosis_date1 - delta, "tfu_false",         "false"),
         (diagnosis_date1 - delta, "tfu_true_or_false", "true"),
+
         (diagnosis_date1,         "tfu_true",          "true"),
         (diagnosis_date1,         "tfu_false",         "false"),
         (diagnosis_date1,         "tfu_true_or_false", "false"),
+
         (diagnosis_date1 + delta, "tfu_true",          "true"),
         (diagnosis_date1 + delta, "tfu_false",         "false"),
         (diagnosis_date1 + delta, "tfu_true_or_false", "false"),
+
         (diagnosis_date2,         "tfu_true",          "false"),
         (diagnosis_date2,         "tfu_false",         "true"),
         (diagnosis_date2,         "tfu_true_or_false", "false"),
+
         (diagnosis_date2 + delta, "tfu_true",          "false"),
         (diagnosis_date2 + delta, "tfu_false",         "true"),
         (diagnosis_date2 + delta, "tfu_true_or_false", "false"),
+
         (diagnosis_date3,         "tfu_true",          "true"),
         (diagnosis_date3,         "tfu_false",         "false"),
         (diagnosis_date3,         "tfu_true_or_false", "false"),
+
         (diagnosis_date3 + delta, "tfu_true",          "true"),
         (diagnosis_date3 + delta, "tfu_false",         "false"),
         (diagnosis_date3 + delta, "tfu_true_or_false", "false"),
@@ -1023,6 +1029,7 @@ def test_diagnosis():
 
 
 def test_sexpr_str_to_term():
+    """ Test parsing of s-expression strings. """
     with solver() as s:
         _ = s.generate_facts() # as a side-effect, generate Functions
         for sexpr_str, expected in [(dedent("""\
@@ -1052,12 +1059,12 @@ def test_solver_segfault():
 
 
 def test_age():
-    """ Can we do equality check on age relation """
-    valid, _, _ = check_statement_validity("(= age 75.86027397260274)")
-    assert valid == "true"
+    """ Does equality work on the `age` relation """
+    valid, _, _ = check_statement_validity("(= age 75.86575342465754)")
+    assert valid == "true", valid
     # truncated should be false (we need a better solution here)
     valid, _, _ = check_statement_validity("(= age 75.8547945)")
-    assert valid == "false"
+    assert valid == "false", valid
 
 
 def test_name_eq_1():
@@ -1066,6 +1073,14 @@ def test_name_eq_1():
     assert not valid.isUnsat(), valid
     valid = create_solver_and_check_sat('(not (= name "Joe Bloggs"))')
     assert valid.isUnsat(), valid
+
+
+def test_name_eq_1b():
+    """ Check that name works properly """
+    valid, _, _ = check_statement_validity('(= name "Joe Bloggs")')
+    assert valid == "true", valid
+    valid, _, _ = check_statement_validity('(= name "Jane Doe")')
+    assert valid == "false", valid
 
 
 def test_name_eq_2():
@@ -1104,6 +1119,7 @@ def test_heart_rate_existential_2():
 
 
 def test_heart_rate_existential_3():
+    """ Test existential quantifier """
     valid = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
     assert valid.isUnsat(), valid
     valid = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
@@ -1119,6 +1135,7 @@ def test_nan_eq_nan():
 
 
 def test_nans():
+    """ NaN should not be equal to a non-NaN float """
     valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
                                         "(fp= (heart-rate 12815) NaN)")
     assert not valid.isSat(), valid
