@@ -286,7 +286,7 @@ def parse_sexpr_from_str(sexpr: str, verbose: bool=False):
                     context.append([])
                     token = token[1:]
                     if verbose:
-                        logger.info("Processed '(', token %s context %s", 
+                        logger.info("Processed '(', token %s context %s",
                                     token, context)
                 while len(token) > 0 and token[0] == ")":
                     x = context.pop()

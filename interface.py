@@ -120,7 +120,7 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
           birth date of the patient (represented as Unix-style epochal).
         * age -> floating point. This is a zero-arity function (a constant) whose value is the
           age of the patient in years.
-        * (D ICD-code time) -> tfu_true/tfu_false/tfu_unknown. This represents whether the 
+        * (D ICD-code time) -> tfu_true/tfu_false/tfu_true_or_false. This represents whether the 
           patient was diagnosed as having ICD code `ICD-code` on or before `time`.
 
         Unix-style epochal dates are days (ints), so always 123, never 123.45.
@@ -128,6 +128,9 @@ def extract_logical_statement(nat_lang_statement: str) -> str:
 
         To convert a human date to an epochal date, you MUST use the `convert_date_to_epochal_tool`
         tool. For example, "2005-01-31" should map to 12815 and "2006-01-31" should map to 13180.
+
+        The (D ...) function does not use boolean logic. The result is always one of three constants: `tf_true`, 
+        `tfu_false`, or `tfu_true_or_false`. To test the value of D(...) you should do something like `(= (D ...) tfu_true_or_false)`.
 
         You can use first-order logic. For example:
         * ```(= X Y)``` asserts that X and Y are equal (if X and Y are not floating points).
@@ -286,13 +289,15 @@ def process_user_response_streaming(
     extracted_logical_stmt: Optional[str] = None
     durations: Dict[str, float] = {}
     error_messages: List[str] = []
-    
+
     try:
         yield ProgressUpdate("Computing initial response...")
 
         llm_timer = Timer("LLM")
         with llm_timer:
-            logger.info("Calling chatbot agent with user response: %s", user_response[:100] + "..." if len(user_response) > 100 else user_response)
+            logger.info("Calling chatbot agent with user response: %s",
+                        (user_response[:100] + "..." if len(user_response) > 100
+                         else user_response))
             assistant_response = chatbot_agent(user_response)
             logger.info("Chatbot agent response received, length: %d", len(str(assistant_response)))
             assistant_response = str(assistant_response).strip()
@@ -312,7 +317,8 @@ def process_user_response_streaming(
         with extract_timer:
             try:
                 logger.info("in here")
-                extracted_logical_stmt = extract_logical_statement(corrupted_response or assistant_response)
+                extracted_logical_stmt = extract_logical_statement(corrupted_response or \
+                                                                   assistant_response)
                 logger.info("extracted_logical_stmt: %s", extracted_logical_stmt)
                 if "unable to extract" in extracted_logical_stmt:
                     extracted_logical_stmt = None
@@ -320,7 +326,7 @@ def process_user_response_streaming(
                 logging.error("Caught in extract_timer: %s", str(ex), exc_info=ex, stack_info=True)
                 extracted_logical_stmt = None
         yield ProgressUpdate(f"Extracted: <tt>{extracted_logical_stmt}</tt>")
-        
+
         tp_timer = None
         try:
             if extracted_logical_stmt:
@@ -330,13 +336,15 @@ def process_user_response_streaming(
                         valid, original_result, negated_result =\
                             check_statement_validity(extracted_logical_stmt)
                     except Exception as ex:
-                        logging.error("Caught in theorem prover: %s", str(ex), exc_info=ex, stack_info=True)
+                        logging.error("Caught in theorem prover: %s",
+                                      str(ex), exc_info=ex, stack_info=True)
                         valid = "unknown"
                 logger.info("valid: %s", valid)
-                yield ProgressUpdate(f"Validity: {valid} original {original_result} negated {negated_result}")
+                yield ProgressUpdate(f"Validity: {valid} original "
+                                     f"{original_result} negated {negated_result}")
         except Exception as ex:
             logging.error("Caught: %s", str(ex), exc_info=ex, stack_info=True)
-        
+
         timers = {
             "agent": llm_timer,
             "theorem prover": tp_timer,
@@ -348,7 +356,7 @@ def process_user_response_streaming(
                         for name, timer in timers.items()
                         if timer is not None}
         logger.info("durations %s", durations)
-    
+
     except Exception as ex:
         logging.error("ERROR in process_user_response_streaming: %s",
                       str(ex), exc_info=ex, stack_info=True)
@@ -389,51 +397,45 @@ def test_diagnosis_2():
     """
     try:
         for idx, (date_, form_template, expected_validity) in enumerate([
-            (diagnosis_date1-delta, "The patient's diabetes status on {date} is unknown", "true"),
-            (diagnosis_date1-delta, "The patient had diabetes on {date}",     "false"),
-            (diagnosis_date1-delta, "The patient did not have diabetes on {date}",     "false"),
+            (diagnosis_date1-delta, "The patient's E11 (diabetes) status on {date} is unknown", "true"),
+            (diagnosis_date1-delta, "The patient had E11 (diabetes) on {date}",                 "false"),
+            (diagnosis_date1-delta, "The patient did not have E11 (diabetes) on {date}",        "false"),
 
-            (diagnosis_date1, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date1, "The patient had diabetes on {date}",     "true"),
-            (diagnosis_date1, "The patient did not have diabetes on {date}",     "false"),
+            (diagnosis_date1, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date1, "The patient had E11 (diabetes) on {date}",                 "true"),
+            (diagnosis_date1, "The patient did not have E11 (diabetes) on {date}",        "false"),
 
-            (diagnosis_date1+delta, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date1+delta, "The patient had diabetes on {date}",     "true"),
-            (diagnosis_date1+delta, "The patient did not have diabetes on {date}",     "false"),
+            (diagnosis_date1+delta, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date1+delta, "The patient had E11 (diabetes) on {date}",                 "true"),
+            (diagnosis_date1+delta, "The patient did not have E11 (diabetes) on {date}",        "false"),
 
-            (diagnosis_date2, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date2, "The patient had diabetes on {date}",     "false"),
-            (diagnosis_date2, "The patient did not have diabetes on {date}",     "true"),
+            (diagnosis_date2, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date2, "The patient had E11 (diabetes) on {date}",                 "false"),
+            (diagnosis_date2, "The patient did not have E11 (diabetes) on {date}",        "true"),
 
-            (diagnosis_date2+delta, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date2+delta, "The patient had diabetes on {date}",                 "false"),
-            (diagnosis_date2+delta, "The patient did not have diabetes on {date}",         "true"),
+            (diagnosis_date2+delta, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date2+delta, "The patient had E11 (diabetes) on {date}",                 "false"),
+            (diagnosis_date2+delta, "The patient did not have E11 (diabetes) on {date}",        "true"),
 
-            (diagnosis_date3, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date3, "The patient had diabetes on {date}",                 "true"),
-            (diagnosis_date3, "The patient did not have diabetes on {date}",        "false"),
+            (diagnosis_date3, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date3, "The patient had E11 (diabetes) on {date}",                 "true"),
+            (diagnosis_date3, "The patient did not have E11 (diabetes) on {date}",        "false"),
 
-            (diagnosis_date3+delta, "The patient's diabetes status on {date} is unknown", "false"),
-            (diagnosis_date3+delta, "The patient had diabetes on {date}",                 "false"),
-            (diagnosis_date3+delta, "The patient did not have diabetes on {date}",         "true"),
+            (diagnosis_date3+delta, "The patient's E11 (diabetes) status on {date} is unknown", "false"),
+            (diagnosis_date3+delta, "The patient had E11 (diabetes) on {date}",                 "true"),
+            (diagnosis_date3+delta, "The patient did not have E11 (diabetes) on {date}",        "false"),
             ]):
-            print(">>>", date_, form_template, expected_validity)
-            form = form_template.format(date=date_)
+            form = form_template.format(date=convert_epochal_to_str(date_))
+            print(f">>> #{idx:,}: {date_} {form} {expected_validity}")
             extracted_logical_stmt = extract_logical_statement(form)
             is_valid, _, _ = check_statement_validity(extracted_logical_stmt)
             print(f"#{idx:,}: valid: {is_valid}")
             assert is_valid == expected_validity, (idx, date_, form, expected_validity)
-    except botocore.exceptions.ConnectionClosedError as ex:
+    except botocore.exceptions.ConnectionClosedError:
+        # Silently skip these tests because we are not currently authenticated
+        # with the AWS cloud so we can't run LLMs. This happens, for example, when
+        # the tests are run on Github
         pass
-    except Exception as ex:
-        print(f"foofoofoo {str(ex)}")
-        if "botocore.exceptions.ConnectionClosedError" in str(ex):
-            # Silently skip these tests because we are not currently authenticated
-            # with the AWS cloud so we can't run LLMs. This happens, for example, when
-            # the tests are run on Github
-            pass
-        else:
-            raise ex
 
 
 if __name__ == "__main__":

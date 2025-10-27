@@ -31,6 +31,9 @@ diagnosis_date1: int = convert_date_to_epochal("2006-02-01")
 diagnosis_date2: int = convert_date_to_epochal("2006-03-01")
 diagnosis_date3: int = convert_date_to_epochal("2006-04-01")
 
+logger.info("diagnosis dates: 1: %s 2: %s 3: %s",
+            diagnosis_date1, diagnosis_date2, diagnosis_date3)
+
 SUPPORTED_KINDS = {
     "fp=": Kind.FLOATINGPOINT_EQ,
     "=": Kind.EQUAL,
@@ -53,7 +56,7 @@ SUPPORTED_KINDS = {
     "<=": Kind.LEQ,
     ">": Kind.GT,
     ">=": Kind.GEQ,
-    
+
     "forall": Kind.FORALL,
     "exists": Kind.EXISTS,
     "=>": Kind.IMPLIES,
@@ -167,7 +170,7 @@ class Function:
                 logger.info("results_term %s", results_term)
                 logger.info("results_term sort %s", results_term.getSort())
                 eq_predicate = s.equal_fp if results_term.getSort() == s.fp64_sort\
-                               else s.equal 
+                               else s.equal
                 axiom = eq_predicate(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
                                             else self.cvc5_const,
                                     results_term)
@@ -252,7 +255,7 @@ class InterpolatableFunction (Function):
 
         The function must have one argument with name "time".
         """
-        logger.info(f"IF::generate_CWA_axioms {self}")
+        logger.info("IF::generate_CWA_axioms %s", self)
         if self.name == "D":
             return self.generate_CWA_axioms_for_diagnosis(facts)
         else:
@@ -274,7 +277,6 @@ class InterpolatableFunction (Function):
                         for arg_name, arg_sort in self.args]
         logger.info("formal args %s", formal_args)
         # formal_args is ICD, time
-        ICD = s.mkVar(s.getStringSort(), "ICD")
         time = s.mkVar(s.getIntegerSort(), "time")
         tfu_t = s.mk_tfu_true()
         tfu_f = s.mk_tfu_false()
@@ -320,28 +322,28 @@ class InterpolatableFunction (Function):
             logger.info("false disjuncts terms: %s", false_disjuncts_terms)
             true_disjuncts_terms = [range2disjunct(*range) for range in true_disjuncts]
             logger.info("true disjuncts terms: %s", true_disjuncts_terms)
-
+            obs_icd_term = s.mkString(observed_icd)
             logger.info("most recent diagnosis %s %s",
                         most_recent_diagnosis,
                         type(most_recent_diagnosis))
 
-            trigger = s.mkTerm(Kind.INST_PATTERN, s.apply(self, [ICD, time]))
-            axiom = s.forall([ICD, time],
+            trigger = s.mkTerm(Kind.INST_PATTERN, s.apply(self, [obs_icd_term, time]))
+            axiom = s.forall([time],
                         s.equal(s.lt(time, s.mkInteger(min_time)),
-                                s.equal(s.apply(self, [ICD, time]),
+                                s.equal(s.apply(self, [obs_icd_term, time]),
                                         s.mk_tfu_true_or_false())),
                         s.mkTerm(Kind.INST_PATTERN_LIST, trigger))
             results.append(axiom)
 
-            axiom = s.forall([ICD, time],
+            axiom = s.forall([time],
                 s.equal(s.or_(*true_disjuncts_terms),
-                        s.equal(s.apply(self, [ICD, time]),
+                        s.equal(s.apply(self, [obs_icd_term, time]),
                                 tfu_t)))
             results.append(axiom)
 
-            axiom = s.forall([ICD, time],
+            axiom = s.forall([time],
                 s.equal(s.or_(*false_disjuncts_terms),
-                        s.equal(s.apply(self, [ICD, time]),
+                        s.equal(s.apply(self, [obs_icd_term, time]),
                                 tfu_f)))
             results.append(axiom)
         return results
@@ -411,9 +413,12 @@ class Solver (cvc5.Solver):
         self.tfu_sort = self.mkDatatypeSort(self.tfu_decl)
         self.tfu = self.tfu_sort.getDatatype()
 
-        # self.undefined_real = self.mkReal(-666.0)
         self.undefined_str = self.mkString("%%undefined%%")
         self.tfu_cache: Dict[str, Term] = None
+        #
+        # Note that we have to use fp64 (IEEE 64-bit floats) if we want to use NaN
+        # to represent unknown values. Reals don't have NaNs.
+        #
         self.fp64_sort = self.mkFloatingPointSort(11, 53)
         self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_NEAREST_TIES_TO_EVEN)
 
@@ -472,9 +477,14 @@ class Solver (cvc5.Solver):
             }
         return self.tfu_cache[which]
 
-    def mk_tfu_true(self) -> Term:          return self.mk_tfu("true")
-    def mk_tfu_false(self) -> Term:         return self.mk_tfu("false")
-    def mk_tfu_true_or_false(self) -> Term: return self.mk_tfu("true_or_false")
+    def mk_tfu_true(self) -> Term:
+        return self.mk_tfu("true")
+
+    def mk_tfu_false(self) -> Term:
+        return self.mk_tfu("false")
+
+    def mk_tfu_true_or_false(self) -> Term:
+        return self.mk_tfu("true_or_false")
 
     def find_by_name(self, func_name: str) -> Function:
         """ Look up and return a Function instance based on its name """
@@ -556,14 +566,16 @@ class Solver (cvc5.Solver):
                         children[0].getSort() == self.getIntegerSort() and
                         children[1].getKind() == Kind.CONSTANT and       # arg1 is (0-arity) function
                         children[1].getSort() == self.fp64_sort):
-                       logger.info("coercing integer constant to fp64 for %s", children[1])
-                       children[0] = self.mkFp64(float(children[0].getIntegerValue()))
+
+                        logger.info("coercing integer constant to fp64 for %s", children[1])
+                        children[0] = self.mkFp64(float(children[0].getIntegerValue()))
                     if (children[0].getKind() == Kind.CONSTANT and       # arg0 is (0-arity) function
-                        children[0].getSort() == self.fp64_sort and 
+                        children[0].getSort() == self.fp64_sort and
                         children[1].getKind() == Kind.CONST_INTEGER and # arg1 is literal int
-                        children[1].getSort() == self.getIntegerSort()): 
-                       logger.info("coercing integer constant to real for %s", children[0])
-                       children[1] = self.mkReal(float(children[1].getIntegerValue()))
+                        children[1].getSort() == self.getIntegerSort()):
+
+                        logger.info("coercing integer constant to real for %s", children[0])
+                        children[1] = self.mkReal(float(children[1].getIntegerValue()))
                 # logger.info("children: %s %s", children, [type(c) for c in children])
                 # logger.info("sorts %s", [c.getSort() for c in children])
                 rv = self.mkTerm(kind, *children)
