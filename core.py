@@ -169,7 +169,7 @@ class Function:
                 logger.info("arg_value_terms %s", arg_value_terms)
                 logger.info("results_term %s", results_term)
                 logger.info("results_term sort %s", results_term.getSort())
-                eq_predicate = s.equal_fp if results_term.getSort() == s.fp64_sort\
+                eq_predicate = s.fp_equal if results_term.getSort() == s.fp64_sort\
                                else s.equal
                 axiom = eq_predicate(s.apply(self.cvc5_const, arg_value_terms) if len(self.args) > 0\
                                             else self.cvc5_const,
@@ -384,8 +384,7 @@ class Solver (cvc5.Solver):
         self.setOption("proof-granularity", "dsl-rewrite")
         self.setOption("produce-difficulty", "true")
         self.setOption("produce-unsat-cores", "true")
-        self.setOption("minimal-unsat-cores", "true")
-        # self.setOption("print-cores-full", "true")
+        # self.setOption("minimal-unsat-cores", "true") # This seems to cause memory to explode
         self.setOption("output", "trigger")
         self.setOption("output", "inst")
         self.setOption("output", "inst-strategy")
@@ -394,6 +393,7 @@ class Solver (cvc5.Solver):
         self.setOption("output", "incomplete")
         self.setOption("verbosity", "5")
         self.setOption("enum-inst", "true")
+        self.setOption("rlimit", "150000")
 
         self.all_functions = []
         self.all_terms = []
@@ -420,7 +420,11 @@ class Solver (cvc5.Solver):
         # to represent unknown values. Reals don't have NaNs.
         #
         self.fp64_sort = self.mkFloatingPointSort(11, 53)
-        self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_NEAREST_TIES_TO_EVEN)
+        self.rounding_mode = self.mkRoundingMode(RoundingMode.ROUND_TOWARD_ZERO)
+
+        self.approx_eq_sort = self.mkFunctionSort([self.fp64_sort, self.fp64_sort],
+                                                   self.getBooleanSort())
+        self.approx_eq_const = self.mkConst(self.approx_eq_sort, "approx=")
 
     def __del__(self):
         logger.info("Destroying %s", self)
@@ -538,6 +542,9 @@ class Solver (cvc5.Solver):
             func_term = funcs_hash[sexpr[0]].cvc5_const
             children = [self.sexpr_to_term(c, variables) for c in sexpr[1:]]
             rv = self.mkTerm(Kind.APPLY_UF, func_term, *children)
+        elif isinstance(sexpr, list) and sexpr[0] == "approx=":
+            args = [self.sexpr_to_term(arg, variables) for arg in sexpr[1:]]
+            rv = self.apply(self.approx_eq_const, args)
         elif isinstance(sexpr, list):
             kind = SUPPORTED_KINDS[sexpr[0].lower()]
             if kind in {Kind.FORALL, Kind.EXISTS}:
@@ -680,7 +687,7 @@ class Solver (cvc5.Solver):
         rv = self.mkTerm(Kind.EQUAL, term1, term2)
         return rv
 
-    def equal_fp(self, term1: Term, term2: Term) -> Term:
+    def fp_equal(self, term1: Term, term2: Term) -> Term:
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_EQ, term1, term2)
         return rv
@@ -695,9 +702,29 @@ class Solver (cvc5.Solver):
         rv = self.mkTerm(Kind.LT, term1, term2)
         return rv
 
-    def lt_fp(self, term1: Term, term2: Term) -> Term:
+    def fp_lt(self, term1: Term, term2: Term) -> Term:
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_LT, term1, term2)
+        return rv
+
+    def fp_div(self, term1: Term, term2: Term) -> Term:
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_DIV, self.rounding_mode, term1, term2)
+        return rv
+
+    def fp_sub(self, term1: Term, term2: Term) -> Term:
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_SUB, self.rounding_mode, term1, term2)
+        return rv
+
+    def fp_max(self, term1: Term, term2: Term) -> Term:
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_MAX, term1, term2)
+        return rv
+
+    def fp_abs(self, term: Term) -> Term:
+        assert isinstance(term, Term)
+        rv = self.mkTerm(Kind.FLOATINGPOINT_ABS, term)
         return rv
 
     def geq(self, term1: Term, term2: Term) -> Term:
@@ -705,7 +732,7 @@ class Solver (cvc5.Solver):
         rv = self.mkTerm(Kind.GEQ, term1, term2)
         return rv
 
-    def geq_fp(self, term1: Term, term2: Term) -> Term:
+    def fp_geq(self, term1: Term, term2: Term) -> Term:
         assert isinstance(term1, Term) and isinstance(term2, Term)
         rv = self.mkTerm(Kind.FLOATINGPOINT_GEQ, term1, term2)
         return rv
@@ -713,6 +740,16 @@ class Solver (cvc5.Solver):
     def not_(self, term: Term) -> Term:
         assert isinstance(term, Term)
         rv = self.mkTerm(Kind.NOT, term)
+        return rv
+
+    def ite(self, term1: Term, term2: Term, term3: Term) -> Term:
+        assert isinstance(term1, Term) and isinstance(term2, Term) and isinstance(term3, Term)
+        rv = self.mkTerm(Kind.ITE, term1, term2, term3)
+        return rv
+
+    def approx_eq(self, term1: Term, term2: Term) -> Term:
+        assert isinstance(term1, Term) and isinstance(term2, Term)
+        rv = self.apply(self.approx_eq_const, [term1, term2])
         return rv
 
     def forall(self,
@@ -744,6 +781,21 @@ class Solver (cvc5.Solver):
             func_const = func_const.cvc5_const
         rv = self.mkTerm(Kind.APPLY_UF, func_const, *formal_args)
         return rv
+    
+    def generate_approx_equals_axioms(self):
+        x = self.mkVar(self.fp64_sort, "x")
+        y = self.mkVar(self.fp64_sort, "y")
+        trigger = self.mkTerm(Kind.INST_PATTERN, self.apply(self.approx_eq_const, [x, y]))
+        axiom = self.forall([x, y],
+                    self.equal(
+                       self.approx_eq(x, y),
+                       self.fp_lt(self.fp_div(
+                                    self.fp_abs(self.fp_sub(x, y)),
+                                    self.ite(self.fp_lt(x, y), y, x)),
+                                    # self.fp_max(x, y)),
+                                  self.mkFp64(0.1))),
+                    self.mkTerm(Kind.INST_PATTERN_LIST, trigger))
+        return [axiom]
 
     def generate_all_axioms(self, facts: list):
         """
@@ -753,6 +805,7 @@ class Solver (cvc5.Solver):
         for function in self.all_functions:
             results.extend(function.generate_core_axioms(facts))
             results.extend(function.generate_CWA_axioms(facts))
+        results.extend(self.generate_approx_equals_axioms())            
         return results
 
     def convert_facts_to_natural_language(self, facts: list) -> List[str]:
@@ -761,7 +814,7 @@ class Solver (cvc5.Solver):
         """
         return [f.as_natural_language() for f in facts]
 
-    def generate_facts(self):
+    def generate_facts(self, age: Optional[float] = None):
         _birth_date: int = convert_date_to_epochal("1950-1-1")
         today = int(datetime.datetime.now().timestamp() / (60*60*24))
 
@@ -792,7 +845,7 @@ class Solver (cvc5.Solver):
         return [
             Fact(name_function, "Joe Bloggs"),
             Fact(birth_date_function, _birth_date),
-            Fact(age_function, (today - _birth_date)/365),
+            Fact(age_function, age if age is not None else (today - _birth_date)/365),
             Fact(heart_rate_function, 55.0,
                  convert_date_to_epochal("2005-02-01")),
             Fact(heart_rate_function, 60.0,
@@ -825,14 +878,20 @@ def show_info_about_result(s: Solver, this_result: Result):
     # for f in formulas:
     #     pprint_term(f)
     # print("=======================")
-    if this_result.isUnsat():
-        logger.info("Getting unsat core")
-        unsat_core = s.getUnsatCore()
-        logger.info("\nUnsat core:")
-        for term in unsat_core:
-            logger.info("Unsat core> %s", pprint_term(term))
-            # logger.info(dump_term(term))
-        logger.info("unsat core=======================")
+    try:
+        if this_result.isUnsat():
+            logger.info("Getting unsat core")
+            unsat_core = s.getUnsatCore()
+            logger.info("\nUnsat core:")
+            for term in unsat_core:
+                logger.info("Unsat core> %s", pprint_term(term))
+                # logger.info(dump_term(term))
+            logger.info("unsat core=======================")
+    except Exception as ex:
+        if "cannot get unsat core" in str(ex):
+            pass # silently gobble this up
+        else:
+            raise ex
     if this_result.isSat():
         logger.info("Getting model")
         m = s.getModel(sorts=[], consts=[])
@@ -843,14 +902,17 @@ def show_info_about_result(s: Solver, this_result: Result):
         logger.info(pprint_term(assertion))
 
 
-def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
+def create_solver_and_check_sat(test_stmt_strs: Union[str,List[str]],
+                                age: Optional[float] = None) -> Result:
     """
     Note that the facts are baked into the Solver. To use a different set of
     facts, create a subclass of Solver.
     """
     logger.info("create_solver_and_check_sat %s", test_stmt_strs)
+    if isinstance(test_stmt_strs, str):
+        test_stmt_strs = [test_stmt_strs]
     with solver() as s:
-        facts = s.generate_facts()
+        facts = s.generate_facts(age=age)
         logger.info("facts:")
         for f in facts:
             logger.info(f.as_natural_language())
@@ -860,13 +922,14 @@ def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
         logger.info("all axioms:")
         for axiom in axioms:
             logger.info(pprint_term(axiom, 0))
-        logger.info("====================")
+            logger.info("END axioms ======")
 
         if test_stmt_strs:
             test_stmts = list(map(s.sexpr_str_to_term, test_stmt_strs))
             logger.info("Test statements:")
             for test_stmt in test_stmts:
                 logger.info(pprint_term(test_stmt))
+            logger.info("END Test statements ========")
             all_axioms = axioms + test_stmts
         else:
             all_axioms = axioms
@@ -888,7 +951,23 @@ def create_solver_and_check_sat(*test_stmt_strs: List[str]) -> Optional[bool]:
         logger.info("Cleared out all_functions, vars, and terms")
     return this_result
 
-def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result]:
+
+def check_statement_validity(logical_stmt_str: str,
+                             age: Optional[float] = None,
+                             in_parallel: bool = False
+                            ) -> Tuple[str, str, str]:
+    """
+    If age is None then we compute the age based on the current date. If
+    it's non-None then we fix it at this value, this is to make sure
+    tests always succeed regardless of when they're run.
+    """
+    opn = check_statement_validity_in_parallel if in_parallel else \
+          check_statement_validity_serial
+    return opn(logical_stmt_str, age)
+
+
+def check_statement_validity_serial(logical_stmt_str: str,
+                                    age: Optional[float]) -> Tuple[str, str, str]:
     """
     In here we take care of the query and negated query
     and combining the results.
@@ -896,34 +975,39 @@ def check_statement_validity(logical_stmt_str: str) -> Tuple[str, Result, Result
     Result is 
     1) one of "true", "false", "unknown". This is just a kludgey way of doing
        three-way logic.
-    2) the cvc5.Result object for the original query
-    3) the cvc5.Result object for the negated query
+    2) string version of the cvc5.Result object for the original query
+    3) string version of the cvc5.Result object for the negated query
     """
     logger.info("check_statement_validity %s", logical_stmt_str)
-    orig_result = create_solver_and_check_sat(logical_stmt_str)
-    logger.info("orig_result: %s", orig_result)
-    negated_result = create_solver_and_check_sat(f"(not {logical_stmt_str})")
-    logger.info("orig_result: %s negated_result: %s", orig_result, negated_result)
-    if negated_result.isUnsat():
-        # we trust an unsat result more than a sat result
-        rv = "true"
-    elif orig_result.isUnsat():
-        rv = "false"
-    elif orig_result.isSat():
-        rv = "true"
-    elif negated_result.isSat():
-        rv = "false"
+    negated_result: Result = create_solver_and_check_sat(f"(not {logical_stmt_str})", age)
+    logger.info("negated_result: %s", negated_result)
+    if negated_result.isUnsat() or negated_result.isSat():
+        # then no need to check the original result too
+        rv = "true" if negated_result.isUnsat() else "false"
+        orig_result = None
     else:
-        rv = "unknown"
+        orig_result: Result = create_solver_and_check_sat(logical_stmt_str, age)
+        logger.info("orig_result: %s negated_result: %s", orig_result, negated_result)
+        if negated_result.isUnsat():
+            # we trust an unsat result more than a sat result
+            rv = "true"
+        elif orig_result.isUnsat():
+            rv = "false"
+        elif orig_result.isSat():
+            rv = "true"
+        elif negated_result.isSat():
+            rv = "false"
+        else:
+            rv = "unknown"
     logger.info("check_statement_validity %s -> %s", logical_stmt_str, rv)
-    return rv, orig_result, negated_result
+    return rv, str(orig_result), str(negated_result)
 
 
-def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
+def check_stmt_job(which: str, logical_stmt_str: str, age: Optional[float], queue: Queue):
     """ When doing parallel validity checks, this is the job """
-    logger.info("check_%s_stmt %s, pid %s:", which, logical_stmt_str, os.getpid())
+    logger.info("check_stmt_job %s %s, pid %s:", which, logical_stmt_str, os.getpid())
     try:
-        result = create_solver_and_check_sat(logical_stmt_str)
+        result: Result = create_solver_and_check_sat(logical_stmt_str, age)
         logger.info("%s>result: %s", which, result)
         queue.put((os.getpid(), which, str(result).lower())) # result isn't pickleable
         logger.info("added to q")
@@ -931,7 +1015,15 @@ def check_stmt_job(which: str, logical_stmt_str: str, queue: Queue):
         queue.put((os.getpid(), f"Error in {which} child: {ex}"))
 
 
-def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
+def result_2_validity(result: str) -> str:
+    """
+    "sat" -> "true", etc.
+    """
+    return {"sat": "true", "unsat": "false"}.get(result, "unknown")
+
+
+def check_statement_validity_in_parallel(logical_stmt_str: str,
+                                    age: Optional[float]) -> Tuple[str, str, str]:
     """
     In here we take care of the query and negated query
     and combining the results.
@@ -940,51 +1032,56 @@ def check_statement_validity_in_parallel(logical_stmt_str: str) -> str:
     way of doing three-way logic.
     """
     result_q = Queue()
-    p1 = Process(target=check_stmt_job, args=("orig", logical_stmt_str, result_q))
-    p2 = Process(target=check_stmt_job, args=("negated", f"(not {logical_stmt_str})", result_q))
+    p1 = Process(target=check_stmt_job, args=("orig", logical_stmt_str, age, result_q))
+    p2 = Process(target=check_stmt_job, args=("negated", f"(not {logical_stmt_str})", age, result_q))
 
     # Start the child processes.
     logger.info("Parent process starting children...")
     p1.start()
     p2.start()
     logger.info("Parent process waiting for the first child to finish...")
-    first_result = result_q.get()
-    finished_pid, which, result = first_result
+    first_pop = result_q.get()
+    print(f"first_pop {first_pop}")
+    finished_pid, which, second_result = first_pop
     logger.info("Parent received a result from PID %s:", finished_pid)
-    logger.info("  {%s}", first_result)
+    logger.info("  {%s}", first_pop)
 
     # Determine which process finished and which one is still running.
-    logger.info("Child %s (pid %s) finished first with result %s",
-                which, finished_pid, result)
+    logger.info("%s child (pid %s) finished first with result %s",
+                which, finished_pid, second_result)
     running_process = p2 if finished_pid == p1.pid else p1
 
-    # Terminate the other process if it is still active.
-    logger.info("Terminating the other child process (PID: %s)...",
-                running_process.pid)
-    if running_process.is_alive():
-        running_process.terminate()
-        running_process.join()  # Wait for the process to fully terminate.
-        logger.info("Process %s has been terminated", running_process.pid)
-    else:
-        logger.info("Process %s has already finished", running_process.pid)
+    if second_result in {"sat", "unsat"}:
+        # Terminate the other process if it is still active.
+        logger.info("Terminating the other child process (PID: %s)...",
+                    running_process.pid)
+        if running_process.is_alive():
+            running_process.terminate()
+            running_process.join()  # Wait for the process to fully terminate.
+            logger.info("Process %s has been terminated", running_process.pid)
+        else:
+            logger.info("Process %s has already finished", running_process.pid)
 
-    logger.info("finished pid %s p1 %s p2 %s", finished_pid, p1, p2)
-    if finished_pid == p2.pid:
-        logger.info("negated solver finished first")
-        if result == "unsat":
-            rv = "true"
-        elif result == "sat":
-            rv = "false"
+        logger.info("finished pid %s p1 %s p2 %s", finished_pid, p1, p2)
+        if finished_pid == p2.pid:
+            logger.info("negated solver finished first")
+            rv = result_2_validity(second_result), "unknown", second_result
         else:
-            rv = "unknown"
+            logger.info("orig solver finished first")
+            rv = result_2_validity(second_result), second_result, "unknown"
     else:
-        logger.info("orig solver finished first")
-        if result == "unsat":
-            rv = "false"
-        elif result == "sat":
-            rv = "true"
+        # keep going as we need to see the other result
+        second_pop = result_q.get()
+        print(f"second_pop {second_pop}")
+        finished_pid, which, second_result = second_pop
+        logger.info("Parent received a result from PID %s:", finished_pid)
+        logger.info("  {%s}", second_pop)
+        if finished_pid == p2.pid:
+            logger.info("negated solver finished second")
+            rv = result_2_validity(second_result), "unknown", second_result
         else:
-            rv = "unknown"
+            logger.info("orig solver finished second")
+            rv = result_2_validity(second_result), second_result, "unknown"
     logger.info("check_statement_validity_in_parallel %s -> {%s",
                 logical_stmt_str, rv)
     return rv
@@ -1066,124 +1163,164 @@ def test_sexpr_str_to_term():
 
 def test_solver_segfault():
     """ Call this multiple times to see if we can get a SEGFAULT. """
-    valid, _, _ = check_statement_validity("(fp> age 40.0)")
-    assert valid == "true"
+    is_valid, _, _ = check_statement_validity("(fp> age 40.0)")
+    assert is_valid == "true", is_valid
 
 
 def test_age():
     """ Does equality work on the `age` relation """
-    valid, _, _ = check_statement_validity("(= age 75.86575342465754)")
-    assert valid == "true", valid
+    is_valid, _, _ = check_statement_validity("(= age 77.3596)", age=77.3596)
+    assert is_valid == "true", is_valid
+    is_valid, _, _ = check_statement_validity("(= age 100.0)")
+    assert is_valid == "false", is_valid
+
+
+def test_approx_equals_age():
+    """ Does approx equality work on the `age` relation """
+    is_valid, _, _ = check_statement_validity("(approx= age 77.0)", age=77.3596)
+    assert is_valid == "true", is_valid
     # truncated should be false (we need a better solution here)
-    valid, _, _ = check_statement_validity("(= age 75.8547945)")
-    assert valid == "false", valid
+    is_valid, _, _ = check_statement_validity("(approx= 77.3596 100.0)", age=77.3596)
+    assert is_valid == "false", is_valid
 
 
 def test_name_eq_1():
     """ Check that name works properly """
-    valid = create_solver_and_check_sat('(= name "Joe Bloggs")')
-    assert not valid.isUnsat(), valid
-    valid = create_solver_and_check_sat('(not (= name "Joe Bloggs"))')
-    assert valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat('(= name "Joe Bloggs")')
+    assert not is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat('(not (= name "Joe Bloggs"))')
+    assert is_valid.isUnsat(), is_valid
 
 
 def test_name_eq_1b():
     """ Check that name works properly """
-    valid, _, _ = check_statement_validity('(= name "Joe Bloggs")')
-    assert valid == "true", valid
-    valid, _, _ = check_statement_validity('(= name "Jane Doe")')
-    assert valid == "false", valid
+    is_valid, _, _ = check_statement_validity('(= name "Joe Bloggs")')
+    assert is_valid == "true", is_valid
+    is_valid, _, _ = check_statement_validity('(= name "Jane Doe")')
+    assert is_valid == "false", is_valid
 
 
 def test_name_eq_2():
     """ Check that name works properly """
-    valid = create_solver_and_check_sat('(= name "John Smith")')
-    assert valid.isUnsat(), valid
-    valid = create_solver_and_check_sat('(not (= name "John Smith"))')
-    assert not valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat('(= name "John Smith")')
+    assert is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat('(not (= name "John Smith"))')
+    assert not is_valid.isUnsat(), is_valid
 
 
 def test_fp_lt():
     """ Make sure < is working on fp64s. """
-    valid, _, _ = check_statement_validity("(fp< 150.0 100.0)")
-    assert valid == "false"
+    is_valid, _, _ = check_statement_validity("(fp< 150.0 100.0)")
+    assert is_valid == "false"
 
 
 def test_fp_gt():
     """ Make sure > is working on fp64s. """
-    valid, _, _ = check_statement_validity("(fp> 150.0 100.0)")
-    assert valid == "true"
+    is_valid, _, _ = check_statement_validity("(fp> 150.0 100.0)")
+    assert is_valid == "true"
 
 
 def test_heart_rate_existential():
     """ The body should never be true """
-    valid, _, _ = check_statement_validity("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
-    assert valid == "false", valid
+    is_valid, _, _ = check_statement_validity("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
+    assert is_valid == "false", is_valid
 
 
 def test_heart_rate_existential_2():
     """ Same """
-    valid = create_solver_and_check_sat(dedent("""\
+    is_valid: Result = create_solver_and_check_sat(dedent("""\
         (exists ((time Int))
           (and (not (fp= (heart-rate time) NaN))
                (fp> (heart-rate time) 100.0)))"""))
-    assert valid.isUnsat(), valid
+    assert is_valid.isUnsat(), is_valid
 
 
 def test_heart_rate_existential_3():
     """ Test existential quantifier """
-    valid = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
-    assert valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
-    assert not valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat("(exists ((time Int)) (fp> (heart-rate time) 100.0))")
+    assert is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(not (exists ((time Int)) (fp> (heart-rate time) 100.0)))")
+    assert not is_valid.isUnsat(), is_valid
 
 
 def test_nan_eq_nan():
     """ Comparison against NaN only works for =, not for fp= """
-    valid = create_solver_and_check_sat("(= NaN NaN)")
-    assert not valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(not (= NaN NaN))")
-    assert valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat("(= NaN NaN)")
+    assert not is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(not (= NaN NaN))")
+    assert is_valid.isUnsat(), is_valid
 
 
 def test_nans():
     """ NaN should not be equal to a non-NaN float """
-    valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
-                                        "(fp= (heart-rate 12815) NaN)")
-    assert not valid.isSat(), valid
-    valid = create_solver_and_check_sat(dedent("""\
+    is_valid: Result = create_solver_and_check_sat(
+                            ["(fp= (heart-rate 12815) 55.0)",
+                             "(fp= (heart-rate 12815) NaN)"])
+    assert not is_valid.isSat(), is_valid
+    is_valid: Result = create_solver_and_check_sat(dedent("""\
         (not (and (fp= (heart-rate 12815) 55.0)
              (fp= (heart-rate 12815) NaN)))"""))
-    assert not valid.isUnsat(), valid
+    assert not is_valid.isUnsat(), is_valid
 
 
 def test_nan_universal():
-    valid = create_solver_and_check_sat("(fp= (heart-rate 12815) 55.0)",
-                                        "(forall ((t Int)) (fp= (heart-rate t) NaN))")
-    assert valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat(
+                            ["(fp= (heart-rate 12815) 55.0)",
+                             "(forall ((t Int)) (fp= (heart-rate t) NaN))"])
+    assert is_valid.isUnsat(), is_valid
 
 
 def test_unknown_heart_rate():
     """ Make sure that unknown heart rates are NaN. """
-    valid = create_solver_and_check_sat("(= (heart-rate 42) NaN)")
-    assert not valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(not (= (heart-rate 42) NaN))")
-    assert not valid.isSat(), valid
+    is_valid: Result = create_solver_and_check_sat("(= (heart-rate 42) NaN)")
+    assert not is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(not (= (heart-rate 42) NaN))")
+    assert not is_valid.isSat(), is_valid
 
 
 def test_fp64_correctness():
     """ Make sure that we're converting float literals into fp64 correctly """
-    valid = create_solver_and_check_sat("(fp< (heart-rate 12815) 100.0)") # Sat
-    assert not valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(fp> (heart-rate 12815) 100.0)") # Unsat
-    assert valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(fp< (heart-rate 12815) 10.0)") # Unsat
-    assert valid.isUnsat(), valid
-    valid = create_solver_and_check_sat("(fp> (heart-rate 12815) 10.0)") # Sat
-    assert not valid.isUnsat(), valid
+    is_valid: Result = create_solver_and_check_sat("(fp< (heart-rate 12815) 100.0)") # Sat
+    assert not is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(fp> (heart-rate 12815) 100.0)") # Unsat
+    assert is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(fp< (heart-rate 12815) 10.0)") # Unsat
+    assert is_valid.isUnsat(), is_valid
+    is_valid: Result = create_solver_and_check_sat("(fp> (heart-rate 12815) 10.0)") # Sat
+    assert not is_valid.isUnsat(), is_valid
+
+
+def test_approx_equals():
+    """ Make sure that (approx= x y) is correct """
+    is_valid, _, _ = check_statement_validity("(approx= 10.0 10.0)", in_parallel=False)
+    assert is_valid == "true", is_valid
+    is_valid, _, _ = check_statement_validity("(approx= 10.0 100.0)")
+    assert is_valid == "false", is_valid
 
 
 if __name__ == "__main__":
+
+    is_valid, _, _ = check_statement_validity("(approx= age 77.0)", age=77.3596, in_parallel=False)
+    assert is_valid == "true", is_valid
+
+    # valid, _, _ = check_statement_validity("(approx= 90.0 80.0)", in_parallel=False)
+    # assert valid == "false", valid
+
+    # valid, _, _ = check_statement_validity("(approx= 80.0 80.0)", in_parallel=False)
+    # assert valid == "true", valid
+
+    # valid, _, _ = check_statement_validity("(approx= age 75.9)", in_parallel=True)
+    # assert valid == "true", valid
+
+    # valid = create_solver_and_check_sat("(not (approx= 10.0 10.0))") # Unsat
+    # assert valid.isUnsat(), valid
+
+    # valid = create_solver_and_check_sat("(approx= 10.0 10.0)") # Sat
+    # assert not valid.isUnsat(), valid
+
+    # valid, _, _ = check_statement_validity(, in_parallel=True)
+    # assert valid == "true", valid
+
     # with solver() as s:
     #     X = s.mkConst(s.fp64_sort, "X")
     #     s.assertFormula(s.equal(X, double_to_fp64(s, 42.0)))
